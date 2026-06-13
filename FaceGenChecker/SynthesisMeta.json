@@ -1,0 +1,8 @@
+{
+  "Nickname": "FaceGenChecker",
+  "Visibility": "Visible",
+  "OneLineDescription": "Reconcile NPC Facegen winning mesh with winnning record",
+  "LongDescription": "Compares mesh's HDPT names with winning NPC_ record.",
+  "PreferredAutoVersioning": "Default",
+  "RequiredMods": []
+}

@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37314.3 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{1E30848A-BC64-4C70-B585-1ED14316F452}") = "FaceGenChecker", "FaceGenChecker\FaceGenChecker.csproj", "{9913F86F-F55B-466D-BB7C-D5349F372729}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9913F86F-F55B-466D-BB7C-D5349F372729}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9913F86F-F55B-466D-BB7C-D5349F372729}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9913F86F-F55B-466D-BB7C-D5349F372729}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9913F86F-F55B-466D-BB7C-D5349F372729}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7E2429D6-A9F3-40F0-B66F-07FC62CE2064}
+	EndGlobalSection
+EndGlobal

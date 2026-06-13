@@ -1,0 +1,6 @@
+{
+  "AddGitPatcher": {
+    "Url": "https://github.com/SteveTownsend/FaceGenChecker",
+    "SelectedProject": "FaceGenChecker\\FaceGenChecker.csproj"
+  }
+}
