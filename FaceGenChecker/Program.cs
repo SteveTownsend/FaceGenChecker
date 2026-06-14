@@ -5,6 +5,7 @@ using Mutagen.Bethesda.Synthesis;
 using Mutagen.Bethesda.Skyrim;
 using System.Threading.Tasks;
 using nifly;
+using System.Threading;
 
 namespace FaceGenChecker
 {
@@ -32,8 +33,14 @@ namespace FaceGenChecker
             sortBlocks = false
         };
 
+        [Conditional("DEBUG")]
+        public static void DelayForDebuggerAttach()
+        {
+            Thread.Sleep(15000);
+        }
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
+            DelayForDebuggerAttach();
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
 

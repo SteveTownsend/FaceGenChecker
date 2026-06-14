@@ -62,6 +62,7 @@ namespace FaceGenChecker
                     var headPart = headPartLink.Resolve(_state.LinkCache);
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}/{1:X8}/{2}", headPart.FormKey.ModKey.FileName, headPart.FormKey.ID, headPart.EditorID);
                 }
+                npcs.Add(npc.FormKey);
                 return true;
             }
             else
