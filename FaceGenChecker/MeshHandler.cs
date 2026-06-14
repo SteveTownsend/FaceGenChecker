@@ -235,10 +235,10 @@ namespace FaceGenChecker
                 _settings.diagnostics.logger.WriteLine("No NPCs found");
                 return;
             }
-            IDictionary<string, FormKey> bsaFiles = new Dictionary<string, FormKey>();
+            IDictionary<string, FormKey> bsaFiles = new ConcurrentDictionary<string, FormKey>();
             int totalNPCs = npcs.Count;
 
-            HashSet<FormKey> looseDone = new HashSet<FormKey>();
+            IDictionary<FormKey, byte> looseDone = new ConcurrentDictionary<FormKey, byte>();
             Parallel.ForEach(npcs, npc =>
             {
                 // loose file wins over BSA contents
@@ -251,7 +251,7 @@ namespace FaceGenChecker
                     using NifFile nif = new NifFile();
                     nif.Load(originalFile);
                     //GenerateMesh(nif, originalFile, newFile, kv.Value.modelType);
-                    looseDone.Add(npc);
+                    looseDone.Add(npc, 1);
                 }
                 else
                 {
