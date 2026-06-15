@@ -18,21 +18,12 @@ using IniParser.Model.Configuration;
 using IniParser.Parser;
 using Mutagen.Bethesda.Inis;
 using Noggog;
+using Noggog.Utility;
 
 namespace FaceGenChecker
 {
     public class MeshHandler
     {
-        //private class TargetMeshInfo
-        //{
-        //    public readonly string originalName;
-        //    public readonly ModelType modelType;
-        //    public TargetMeshInfo(string name, ModelType model)
-        //    {
-        //        originalName = name;
-        //        modelType = model;
-        //    }
-        //}
         internal Settings _settings { get; }
         internal IPatcherState<ISkyrimMod, ISkyrimModGetter> _state { get; }
 
@@ -60,10 +51,47 @@ namespace FaceGenChecker
             _state = state;
         }
 
+        // no blacklist for NPC or Race at this time
+        private bool IsExcluded(INpcGetter npc)
+        {
+            // ignore presets
+            if (npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.IsCharGenFacePreset))
+            {
+                return false;
+            }
+            // ignore player
+            if (npc.FormKey.ID == 7 && npc.FormKey.ModKey.FileName.String.Equals("skyrim.esm", StringComparison.InvariantCultureIgnoreCase))
+            {
+                return false;
+            }
+            // ignore if this uses template NPC_ record's traits
+            if (npc.Configuration.TemplateFlags.HasFlag(NpcConfiguration.TemplateFlag.Traits))
+            {
+                return false;
+            }
+            // ignore unless NPC_'s Race has head data
+            IRaceGetter race = npc.Race.Resolve<IRaceGetter>(_state.LinkCache);
+            if (race is null || !race.Flags.HasFlag(Race.Flag.FaceGenHead))
+            {
+                return false;
+            }
+            // ignore Ghost NPCs
+            if (npc.HasKeyword("ActorTypeGhost", _state.LinkCache))
+            { 
+                return false;
+            }
+            return true;
+        }
+
         private bool DoNPC(INpcGetter npc)
         {
             if (npc.ToLink<INpcGetter>().TryResolveSimpleContext(_state.LinkCache, out var context))
             {
+                if (IsExcluded(npc))
+                {
+                    _settings.diagnostics.logger.WriteLine("Spip NPC {0}", npc.FormKey);
+                    return false;
+                }
                 _settings.diagnostics.logger.WriteLine("NPC {0}/{1:X8} in {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
                 foreach (var headPartLink in npc.HeadParts)
@@ -329,10 +357,10 @@ namespace FaceGenChecker
                 foreach (var bsaFile in archivePaths)
                 {
                     var bsaReader = Archive.CreateReader(_state.GameRelease, bsaFile);
-                    //bsaReader.Files.AsParallel().
-                    //    Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())).
-                    //    ForAll(bsaMesh =>
-                    foreach (var bsaMesh in bsaReader.Files.Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())))
+                    bsaReader.Files.AsParallel().
+                        Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())).
+                        ForAll(bsaMesh =>
+                        //foreach (var bsaMesh in bsaReader.Files.Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())))
                         {
                             try
                             {
@@ -360,17 +388,10 @@ namespace FaceGenChecker
                                 _settings.diagnostics.logger.WriteLine("Exception on {0} from BSA {1}: {2}", bsaMesh.Path, bsaFile, e.GetBaseException());
                             }
                         }
-                    //);
+                    );
                 }
             }
 
-            //var missingFiles = targetMeshes.Where(kv => !looseDone.ContainsKey(kv.Key) && !bsaDone.ContainsKey(kv.Key)).ToList();
-            //foreach (var mesh in missingFiles)
-            //{
-            //    _settings.diagnostics.logger.WriteLine("Referenced Mesh {0} not found loose or in BSA", mesh.Key);
-            //}
-            //_settings.diagnostics.logger.WriteLine("{0} total meshes: found {1} Loose, {2} in BSA, {3} missing files",
-            //    targetMeshes.Count, looseDone.Count, bsaDone.Count, missingFiles.Count);
             _settings.diagnostics.logger.WriteLine("Generated {0}, Candidates {1}, Skipped {2}, Failed {3}",
                 countGenerated, countCandidates, countSkipped, countFailed);
         }
