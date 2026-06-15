@@ -52,7 +52,7 @@ namespace FaceGenChecker
         }
 
         // no blacklist for NPC or Race at this time
-        private bool IsExcluded(INpcGetter npc)
+        private bool IsIncluded(INpcGetter npc)
         {
             // ignore presets
             if (npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.IsCharGenFacePreset))
@@ -92,7 +92,7 @@ namespace FaceGenChecker
         {
             if (npc.ToLink<INpcGetter>().TryResolveSimpleContext(_state.LinkCache, out var context))
             {
-                if (IsExcluded(npc))
+	            if (!IsIncluded(npc))
                 {
                     return false;
                 }
