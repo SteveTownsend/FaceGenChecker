@@ -89,7 +89,7 @@ namespace FaceGenChecker
             {
                 if (IsExcluded(npc))
                 {
-                    _settings.diagnostics.logger.WriteLine("Spip NPC {0}", npc.FormKey);
+                    _settings.diagnostics.logger.WriteLine("Skip NPC {0}", npc.FormKey);
                     return false;
                 }
                 _settings.diagnostics.logger.WriteLine("NPC {0}/{1:X8} in {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, context.ModKey.FileName);

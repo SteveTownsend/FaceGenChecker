@@ -20,21 +20,22 @@ namespace FaceGenChecker
 
         public void WriteLine(string format, params object?[] args)
         {
+            var decorated = String.Format("{0:D6} {1}", System.Threading.Thread.CurrentThread.ManagedThreadId, format);
             if (logWriter != null)
             {
                 lock (_lock)
                 {
-                    logWriter.WriteLine(String.Format("{0:D6} {1}", System.Threading.Thread.CurrentThread.ManagedThreadId, format), args);
+                    logWriter.WriteLine(decorated, args);
                 }
             }
-            Console.WriteLine(format, args);
+            Console.WriteLine(decorated, args);
         }
 
         public void Dispose()
         {
             if (logWriter != null)
             {
-                logWriter.Flush();
+                logWriter.Close();
                 logWriter.Dispose();
             }
         }
