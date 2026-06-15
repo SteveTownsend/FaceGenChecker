@@ -120,7 +120,6 @@ namespace FaceGenChecker
                                 {
                                     if (headPart.Name is null)
                                     {
-                                        _settings.diagnostics.logger.WriteLine("  HeadPart {0} unnamed, skip", headPart);
                                         continue;
                                     }
                                     headPartFound = headPart.Name.String == headPartName;

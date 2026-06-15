@@ -24,7 +24,7 @@ namespace FaceGenChecker
             {
                 lock (_lock)
                 {
-                    logWriter.WriteLine(format, args);
+                    logWriter.WriteLine(String.Format("{0:D6} {1}", System.Threading.Thread.CurrentThread.ManagedThreadId, format), args);
                 }
             }
             Console.WriteLine(format, args);
