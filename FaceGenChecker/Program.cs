@@ -33,13 +33,8 @@ namespace FaceGenChecker
             sortBlocks = false
         };
 
-        public static void DelayForDebuggerAttach()
-        {
-            Thread.Sleep(15000);
-        }
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
-            DelayForDebuggerAttach();
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
 

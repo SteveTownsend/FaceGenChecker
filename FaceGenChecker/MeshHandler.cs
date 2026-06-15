@@ -36,9 +36,18 @@ namespace FaceGenChecker
         internal Settings _settings { get; }
         internal IPatcherState<ISkyrimMod, ISkyrimModGetter> _state { get; }
 
-        public static readonly string MeshPrefix = "meshes/actors/character/facegendata/facegeom/";
+        // use backslashes to match paths in BSA
+        public static readonly string MeshPrefix = "meshes\\actors\\character\\facegendata\\facegeom\\";
+        public static readonly string FaceGenRootNode = "BSFaceGenNiNodeSkinned";
+        public static readonly string DuplicateTag = "DUPLICATE";
 
-        private HashSet<FormKey> npcs = new HashSet<FormKey>();
+        private HashSet<INpcGetter> npcs = new HashSet<INpcGetter>();
+        private IDictionary<FormKey, ICollection<IHeadPartGetter>> headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
+        private HashSet<HeadPart.TypeEnum> validParts = new HashSet<HeadPart.TypeEnum>
+        { HeadPart.TypeEnum.Eyebrows,
+            HeadPart.TypeEnum.Eyes,
+            HeadPart.TypeEnum.Face,
+            HeadPart.TypeEnum.Hair };
 
         private int countSkipped;
         private int countCandidates;
@@ -56,13 +65,22 @@ namespace FaceGenChecker
             if (npc.ToLink<INpcGetter>().TryResolveSimpleContext(_state.LinkCache, out var context))
             {
                 _settings.diagnostics.logger.WriteLine("NPC {0}/{1:X8} in {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, context.ModKey.FileName);
-                // load the NPC's winning NIF
+                var headParts = new HashSet<IHeadPartGetter>();
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
+                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
+                        continue;
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}/{1:X8}/{2}", headPart.FormKey.ModKey.FileName, headPart.FormKey.ID, headPart.EditorID);
+                    if (headPart.Name.String.Contains(DuplicateTag))
+                    {
+                        // possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
+                        _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.Name.String);
+                    }
+                    headParts.Add(headPart);
                 }
-                npcs.Add(npc.FormKey);
+                headPartsByNpc.Add(npc.FormKey, headParts);
+                npcs.Add(npc);
                 return true;
             }
             else
@@ -73,33 +91,72 @@ namespace FaceGenChecker
         }
 
 
-        //public void GenerateMesh(NifFile nif, string originalPath, string newPath, ModelType modelType)
-        //{
-        //    try
-        //    {
-        //        modelType = FinalizeModelType(nif, originalPath, modelType);
+        public void DoMesh(NifFile nif, string originalPath, string newPath, INpcGetter npc)
+        {
+            try
+            {
+                // match head parts with the winning NPC record's list
+                _settings.diagnostics.logger.WriteLine("Check HeadParts in NIF {0} vs {1}", originalPath, npc);
+                var headParts = headPartsByNpc[npc.FormKey];
+                using (var rootNode = nif.FindBlockByNameNiNode(FaceGenRootNode))
+                {
+                    if (rootNode == null)
+                        return;
 
-        //        WeaponType weaponType = weaponTypeByModelType[modelType];
-        //        if (weaponType == WeaponType.OneHandMelee ||
-        //            (weaponType == WeaponType.TwoHandMelee && _settings.meshes.Accept2HWeapons))
-        //        {
-        //            // TODO selective patching by weapon type would need a filter here
-        //            Interlocked.Increment(ref countCandidates);
-        //            using NifTransformer transformer = new NifTransformer(this, nif, originalPath, newPath, modelType, weaponType);
-        //            transformer.Generate();
-        //        }
-        //        else
-        //        {
-        //            _settings.diagnostics.logger.WriteLine("Skip {0}, incorrect WeaponType {1}", originalPath, weaponType);
-        //            Interlocked.Increment(ref countSkipped);
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        Interlocked.Increment(ref countFailed);
-        //        _settings.diagnostics.logger.WriteLine("Exception processing {0}: {1}", originalPath, e.GetBaseException());
-        //    }
-        //}
+                    niflycpp.BlockCache blockCache = new niflycpp.BlockCache(nif.GetHeader());
+                    using var childNodes = rootNode.GetChildren().GetRefs();
+                    UInt32 mismatches = 0;
+                    foreach (var childNode in childNodes)
+                    {
+                        using (childNode)
+                        {
+                            NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
+                            if (nodeBlock != null)
+                            {
+                                using var blockName = nodeBlock.name;
+                                bool headPartFound = false;
+                                var headPartName = blockName.get();
+                                foreach (var headPart in headParts)
+                                {
+                                    if (headPart.Name is null)
+                                    {
+                                        _settings.diagnostics.logger.WriteLine("  HeadPart {0} unnamed, skip", headPart);
+                                        continue;
+                                    }
+                                    headPartFound = headPart.Name.String == headPartName;
+                                    if (headPartFound)
+                                        break;
+                                }
+                                if (!headPartFound)
+                                {
+                                    _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF not matched", headPartName);
+                                    ++mismatches;
+                                }
+                                else
+                                {
+                                    _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF matched", headPartName);
+                                }
+                            }
+                        }
+                    }
+                    // all plugin headparts must be present in the NIF
+                    if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
+                    {
+                        _settings.diagnostics.logger.WriteLine("  {0} forwarded, headparts mismatched", npc);
+                        _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                    }
+                    else
+                    {
+                        _settings.diagnostics.logger.WriteLine("  headpart match, should be OK in game");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Interlocked.Increment(ref countFailed);
+                _settings.diagnostics.logger.WriteLine("Exception processing {0}: {1}", originalPath, e.GetBaseException());
+            }
+        }
 
         /* engine reverts to defaults if it can't read files (the archaic GetPrivateProfile api is used), we might as well 
          * throw and force the user to sort out their stuff */
@@ -235,27 +292,28 @@ namespace FaceGenChecker
                 _settings.diagnostics.logger.WriteLine("No NPCs found");
                 return;
             }
-            IDictionary<string, FormKey> bsaFiles = new ConcurrentDictionary<string, FormKey>();
+            IDictionary<string, INpcGetter> bsaFiles = new ConcurrentDictionary<string, INpcGetter>();
             int totalNPCs = npcs.Count;
 
-            IDictionary<FormKey, byte> looseDone = new ConcurrentDictionary<FormKey, byte>();
+            IDictionary<INpcGetter, byte> looseDone = new ConcurrentDictionary<INpcGetter, byte>();
             Parallel.ForEach(npcs, npc =>
             {
                 // loose file wins over BSA contents
-                string originalFile = String.Format("{0}{1}/{2}/{3:X8}.nif", _settings.paths.ConflictWinnerLocation, MeshPrefix, npc.ModKey.FileName, npc.ID);
-                //string newFile = _settings.paths.OutputFolder + MeshPrefix + kv.Key;
+                string originalFile = String.Format("{0}{1}\\{2:X8}.nif", MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
                 if (File.Exists(originalFile))
                 {
-                    _settings.diagnostics.logger.WriteLine("Found mesh for {0}/{1:X8} in loose file {2}", npc.ModKey.Name, npc.ID, originalFile);
+                    _settings.diagnostics.logger.WriteLine("Found mesh for {0}/{1:X8} in loose file {2}", npc.FormKey.ModKey.Name, npc.FormKey.ID, originalFile);
 
                     using NifFile nif = new NifFile();
                     nif.Load(originalFile);
-                    //GenerateMesh(nif, originalFile, newFile, kv.Value.modelType);
+                    DoMesh(nif, originalFile, newFile, npc);
                     looseDone.Add(npc, 1);
                 }
                 else
                 {
                     // check for this file in archives
+                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0}/{1:X8} with mesh file {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, originalFile);
                     bsaFiles.Add(originalFile.ToLower(), npc);
                 }
             });
@@ -272,23 +330,24 @@ namespace FaceGenChecker
 
                     archivePaths.ForEach(x => _settings.diagnostics.logger.WriteLine("\t{0}", x));
                 }
-
                 // Introspect all known BSAs to locate meshes not found as loose files. Dups are ignored - first find wins.
                 foreach (var bsaFile in archivePaths)
                 {
                     var bsaReader = Archive.CreateReader(_state.GameRelease, bsaFile);
-                    bsaReader.Files.AsParallel().
-                        Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())).
-                        ForAll(bsaMesh =>
+                    //bsaReader.Files.AsParallel().
+                    //    Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())).
+                    //    ForAll(bsaMesh =>
+                    foreach (var bsaMesh in bsaReader.Files.Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())))
                         {
                             try
                             {
+                                var npc = bsaFiles.GetOrDefault(bsaMesh.Path.ToLower());
                                 //                                string rawPath = bsaFiles[bsaMesh.Path.ToLower()];
                                 //                                TargetMeshInfo meshInfo = targetMeshes[rawPath];
 
                                 if (!bsaDone.TryAdd(bsaMesh.Path, bsaFile.Path))
                                 {
-                                    _settings.diagnostics.logger.WriteLine("Mesh {0} from BSA {1} already processed from BSA {2}", bsaMesh.Path, bsaFile.Path, bsaDone[bsaMesh.Path]);
+                                    _settings.diagnostics.logger.WriteLine("{0} from BSA {1} already processed from BSA {2}", bsaMesh.Path, bsaFile.Path, bsaDone[bsaMesh.Path]);
                                     return;
                                 }
 
@@ -298,16 +357,17 @@ namespace FaceGenChecker
 
                                 using (var nif = new NifFile(bsaBytes))
                                 {
-                                    _settings.diagnostics.logger.WriteLine("Transform mesh {0} from BSA {1}", bsaMesh.Path, bsaFile);
+                                    _settings.diagnostics.logger.WriteLine("Process {0} from BSA {1}", bsaMesh.Path, bsaFile);
                                     string newFile = _settings.paths.OutputFolder + bsaMesh.Path;
-                                    //GenerateMesh(nif, bsaMesh.Path, newFile, meshInfo.modelType);
+                                    DoMesh(nif, bsaMesh.Path, newFile, npc);
                                 }
                             }
                             catch (Exception e)
                             {
-                                _settings.diagnostics.logger.WriteLine("Exception on mesh {0} from BSA {1}: {2}", bsaMesh.Path, bsaFile, e.GetBaseException());
+                                _settings.diagnostics.logger.WriteLine("Exception on {0} from BSA {1}: {2}", bsaMesh.Path, bsaFile, e.GetBaseException());
                             }
-                        });
+                        }
+                    //);
                 }
             }
 
