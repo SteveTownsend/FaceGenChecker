@@ -103,7 +103,7 @@ namespace FaceGenChecker
                     if (rootNode == null)
                         return;
 
-                    niflycpp.BlockCache blockCache = new niflycpp.BlockCache(nif.GetHeader());
+                    using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(nif.GetHeader());
                     using var childNodes = rootNode.GetChildren().GetRefs();
                     UInt32 mismatches = 0;
                     foreach (var childNode in childNodes)
@@ -350,13 +350,11 @@ namespace FaceGenChecker
                                 // Load NIF from stream via String - must rewind first
                                 byte[] bsaData = bsaMesh.GetBytes();
                                 using vectoruchar bsaBytes = new vectoruchar(bsaData);
+                                using var nif = new NifFile(bsaBytes);
 
-                                using (var nif = new NifFile(bsaBytes))
-                                {
-                                    _settings.diagnostics.logger.WriteLine("Process {0} from BSA {1}", bsaMesh.Path, bsaFile);
-                                    string newFile = _settings.paths.OutputFolder + bsaMesh.Path;
-                                    DoMesh(nif, bsaMesh.Path, newFile, npc);
-                                }
+                                _settings.diagnostics.logger.WriteLine("Process {0} from BSA {1}", bsaMesh.Path, bsaFile);
+                                string newFile = _settings.paths.OutputFolder + bsaMesh.Path;
+                                DoMesh(nif, bsaMesh.Path, newFile, npc);
                             }
                             catch (Exception e)
                             {
