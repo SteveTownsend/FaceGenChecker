@@ -72,7 +72,7 @@ namespace FaceGenChecker
                     if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
                         continue;
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}/{1:X8}/{2}", headPart.FormKey.ModKey.FileName, headPart.FormKey.ID, headPart.EditorID);
-                    if (headPart.Name.String.Contains(DuplicateTag))
+                    if (headPart.Name is not null && headPart.Name.String.Contains(DuplicateTag))
                     {
                         // possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
                         _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.Name.String);
