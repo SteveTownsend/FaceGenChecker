@@ -98,52 +98,51 @@ namespace FaceGenChecker
                 // match head parts with the winning NPC record's list
                 _settings.diagnostics.logger.WriteLine("Check HeadParts in NIF {0} vs {1}", originalPath, npc);
                 var headParts = headPartsByNpc[npc.FormKey];
-                using (var rootNode = nif.FindBlockByNameNiNode(FaceGenRootNode))
-                {
-                    if (rootNode == null)
-                        return;
+                using var rootNode = nif.FindBlockByNameNiNode(FaceGenRootNode);
+                if (rootNode is null)
+                    return;
 
-                    using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(nif.GetHeader());
-                    using var childNodes = rootNode.GetChildren().GetRefs();
-                    UInt32 mismatches = 0;
-                    foreach (var childNode in childNodes)
+                using var header = nif.GetHeader();
+                using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
+                using var childNodes = rootNode.GetChildren().GetRefs();
+                UInt32 mismatches = 0;
+                foreach (var childNode in childNodes)
+                {
+                    using (childNode)
                     {
-                        using (childNode)
+                        using NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
+                        if (nodeBlock != null)
                         {
-                            NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
-                            if (nodeBlock != null)
+                            using var blockName = nodeBlock.name;
+                            bool headPartFound = false;
+                            var headPartName = blockName.get();
+                            foreach (var headPart in headParts)
                             {
-                                using var blockName = nodeBlock.name;
-                                bool headPartFound = false;
-                                var headPartName = blockName.get();
-                                foreach (var headPart in headParts)
-                                {
-                                    headPartFound = headPart.EditorID == headPartName;
-                                    if (headPartFound)
-                                        break;
-                                }
-                                if (!headPartFound)
-                                {
-                                    _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF not matched", headPartName);
-                                    ++mismatches;
-                                }
-                                else
-                                {
-                                    _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF matched", headPartName);
-                                }
+                                headPartFound = headPart.EditorID == headPartName;
+                                if (headPartFound)
+                                    break;
+                            }
+                            if (!headPartFound)
+                            {
+                                _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF not matched", headPartName);
+                                ++mismatches;
+                            }
+                            else
+                            {
+                                _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF matched", headPartName);
                             }
                         }
                     }
-                    // all plugin headparts must be present in the NIF
-                    if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
-                    {
-                        _settings.diagnostics.logger.WriteLine("  {0} forwarded, headparts mismatched", npc);
-                        _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
-                    }
-                    else
-                    {
-                        _settings.diagnostics.logger.WriteLine("  headpart match, should be OK in game");
-                    }
+                }
+                // all plugin headparts must be present in the NIF
+                if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
+                {
+                    _settings.diagnostics.logger.WriteLine("  {0} forwarded, headparts mismatched", npc);
+                    _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                }
+                else
+                {
+                    _settings.diagnostics.logger.WriteLine("  headpart match, should be OK in game");
                 }
             }
             catch (Exception e)
