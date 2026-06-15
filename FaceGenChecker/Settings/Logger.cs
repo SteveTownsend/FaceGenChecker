@@ -35,7 +35,6 @@ namespace FaceGenChecker
         {
             if (logWriter != null)
             {
-                logWriter.Close();
                 logWriter.Dispose();
             }
         }

@@ -57,27 +57,32 @@ namespace FaceGenChecker
             // ignore presets
             if (npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.IsCharGenFacePreset))
             {
+                _settings.diagnostics.logger.WriteLine("Skip Preset {0}", npc.FormKey);
                 return false;
             }
             // ignore player
             if (npc.FormKey.ID == 7 && npc.FormKey.ModKey.FileName.String.Equals("skyrim.esm", StringComparison.InvariantCultureIgnoreCase))
             {
+                _settings.diagnostics.logger.WriteLine("Skip Player {0}", npc.FormKey);
                 return false;
             }
             // ignore if this uses template NPC_ record's traits
             if (npc.Configuration.TemplateFlags.HasFlag(NpcConfiguration.TemplateFlag.Traits))
             {
+                _settings.diagnostics.logger.WriteLine("Skip NPC using template traits {0}", npc.FormKey);
                 return false;
             }
             // ignore unless NPC_'s Race has head data
             IRaceGetter race = npc.Race.Resolve<IRaceGetter>(_state.LinkCache);
             if (race is null || !race.Flags.HasFlag(Race.Flag.FaceGenHead))
             {
+                _settings.diagnostics.logger.WriteLine("Skip NPC with no facegen {0}", npc.FormKey);
                 return false;
             }
             // ignore Ghost NPCs
             if (npc.HasKeyword("ActorTypeGhost", _state.LinkCache))
-            { 
+            {
+                _settings.diagnostics.logger.WriteLine("Skip Ghost {0}", npc.FormKey);
                 return false;
             }
             return true;
@@ -89,7 +94,6 @@ namespace FaceGenChecker
             {
                 if (IsExcluded(npc))
                 {
-                    _settings.diagnostics.logger.WriteLine("Skip NPC {0}", npc.FormKey);
                     return false;
                 }
                 _settings.diagnostics.logger.WriteLine("NPC {0}/{1:X8} in {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, context.ModKey.FileName);

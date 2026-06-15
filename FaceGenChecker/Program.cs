@@ -53,37 +53,7 @@ namespace FaceGenChecker
 
             settings.diagnostics.logger.WriteLine("NPC analysis: {0} ms", analysisTime);
             settings.diagnostics.logger.WriteLine("Mesh processing: {0} ms", meshTime);
-            //    uint alreadyWins = 0;
-            //    uint hasBetterFacegen = 0;
-            //    uint useBaseline = 0;
-            //    foreach (var baselineNPC in baselineMod.Mod.Npcs)
-            //    {
-            //        // we need to introspect the provenance of the record
-            //        var contexts = state.LinkCache.ResolveAllContexts<INpc, INpcGetter>(baselineNPC.FormKey).ToList();
-            //        var currentWinner = contexts[0];
-            //        if (currentWinner.ModKey == baselineModKey)
-            //        {
-            //            Console.WriteLine("Baseline is winning override for {0}/{1:X8}", baselineNPC.Name, baselineNPC.FormKey.ID);
-            //            ++alreadyWins;
-            //            continue;
-            //        }
-            //        // Compare winning override Head Parts with master - if this record is already overriding the appearance, we let it win
-            //        var master = contexts.Last();
-            //        var masterHDPTs = master.Record.HeadParts.Select(s => s.TryResolve<IHeadPartGetter>(state.LinkCache)).ToHashSet();
-            //        var winnerHDPTs = currentWinner.Record.HeadParts.Select(s => s.TryResolve<IHeadPartGetter>(state.LinkCache)).ToHashSet();
-            //        if (masterHDPTs.SetEquals(winnerHDPTs))
-            //        {
-            //            Console.WriteLine("Baseline appearance used for {0}/{1:X8}", baselineNPC.Name, baselineNPC.FormKey.ID);
-            //            ++useBaseline;
-            //        }
-            //        else
-            //        {
-            //            Console.WriteLine("Appearance for {0}/{1:X8} provided by {2}", baselineNPC.Name, baselineNPC.FormKey.ID, currentWinner.ModKey.FileName);
-            //            ++hasBetterFacegen;
-            //        }
-            //    }
-            //    Console.WriteLine("NPC Records {0} : Baseline already the winner for {1}, used as new winner for {2}, lost to better facegen for {3}",
-            //        baselineMod.Mod.Npcs.Count, alreadyWins, useBaseline, hasBetterFacegen);
+            settings.diagnostics.logger.Dispose();
         }
     }
 }
