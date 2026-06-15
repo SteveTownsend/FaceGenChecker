@@ -299,22 +299,23 @@ namespace FaceGenChecker
             Parallel.ForEach(npcs, npc =>
             {
                 // loose file wins over BSA contents
-                string originalFile = String.Format("{0}{1}\\{2:X8}.nif", MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                string relativePath = String.Format("{0}{1}\\{2:X8}.nif", MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                string fullPath = String.Format("{0}/{1}", _settings.paths.ConflictWinnerLocation, relativePath);
                 string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
-                if (File.Exists(originalFile))
+                if (File.Exists(fullPath))
                 {
-                    _settings.diagnostics.logger.WriteLine("Found mesh for {0}/{1:X8} in loose file {2}", npc.FormKey.ModKey.Name, npc.FormKey.ID, originalFile);
+                    _settings.diagnostics.logger.WriteLine("Found mesh for {0}/{1:X8} in loose file {2}", npc.FormKey.ModKey.Name, npc.FormKey.ID, fullPath);
 
                     using NifFile nif = new NifFile();
-                    nif.Load(originalFile);
-                    DoMesh(nif, originalFile, newFile, npc);
+                    nif.Load(fullPath);
+                    DoMesh(nif, relativePath, newFile, npc);
                     looseDone.Add(npc, 1);
                 }
                 else
                 {
                     // check for this file in archives
-                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0}/{1:X8} with mesh file {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, originalFile);
-                    bsaFiles.Add(originalFile.ToLower(), npc);
+                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0}/{1:X8} with mesh file {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, relativePath);
+                    bsaFiles.Add(relativePath.ToLower(), npc);
                 }
             });
 

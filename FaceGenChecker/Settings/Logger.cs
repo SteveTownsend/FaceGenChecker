@@ -1,18 +1,20 @@
-﻿using System;
+﻿using Noggog;
+using System;
 using System.IO;
+using System.Threading;
 
 namespace FaceGenChecker
 {
     public class Logger : IDisposable
     {
-        private StreamWriter? logWriter;
+        private TextWriter? logWriter;
+        Lock _lock = new();
 
         public Logger(string fileName)
         {
             if (!String.IsNullOrEmpty(fileName))
             {
-                logWriter = new StreamWriter(fileName, false);
-                logWriter.AutoFlush = true;
+                logWriter = TextWriter.Synchronized(File.AppendText(fileName));
             }
         }
 
@@ -20,7 +22,10 @@ namespace FaceGenChecker
         {
             if (logWriter != null)
             {
-                logWriter.WriteLine(format, args);
+                lock (_lock)
+                {
+                    logWriter.WriteLine(format, args);
+                }
             }
             Console.WriteLine(format, args);
         }
