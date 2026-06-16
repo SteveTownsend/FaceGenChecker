@@ -1,24 +1,25 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using IniParser;
+using IniParser.Model.Configuration;
+using IniParser.Parser;
+using Mutagen.Bethesda;
+using Mutagen.Bethesda.Archives;
+using Mutagen.Bethesda.Inis;
+using Mutagen.Bethesda.Inis.DI;
+using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Aspects;
+using Mutagen.Bethesda.Skyrim;
+using Mutagen.Bethesda.Synthesis;
+using nifly;
+using Noggog;
+using Noggog.Utility;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using Mutagen.Bethesda;
-using Mutagen.Bethesda.Skyrim;
-using Mutagen.Bethesda.Synthesis;
-using Mutagen.Bethesda.Plugins;
-using Mutagen.Bethesda.Archives;
-using Mutagen.Bethesda.Inis.DI;
 using System.Threading.Tasks;
 using SSEForms = Mutagen.Bethesda.FormKeys.SkyrimSE;
-using nifly;
-using IniParser;
-using IniParser.Model.Configuration;
-using IniParser.Parser;
-using Mutagen.Bethesda.Inis;
-using Noggog;
-using Noggog.Utility;
 
 namespace FaceGenChecker
 {
@@ -114,9 +115,13 @@ namespace FaceGenChecker
                                     HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
                                     renamed.EditorID = originalName;
                                     _settings.diagnostics.logger.WriteLine("  EditorID was {0}, now {1}", headPart.EditorID, originalName);
+                                    // store the updated HeadPart for use in validation
+                                    updatedHeadParts.Add(renamed);
                                 }
-                                // store the updated HeadPart for use in validation
-                                updatedHeadParts.Add(headPart);
+                                else
+                                {
+                                    updatedHeadParts.Add(headPart);
+                                }
                             }
                         }
                         else

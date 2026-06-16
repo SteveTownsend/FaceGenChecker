@@ -38,9 +38,9 @@ namespace FaceGenChecker
                         MergedPlugins.Add(mergeInput.Value<string>()!, (string)mergeResult!);
                     }
                     MergeResults.Add(mergeResult.Value<string>());
+                    MergePaths.Add(mergePath);
+                    Program.settings.diagnostics.logger.WriteLine("Found possible merged plugin {0} at {1}", mergeResult, mergePath);
                 }
-                MergePaths.Add(mergePath);
-                Program.settings.diagnostics.logger.WriteLine("Found possible merged plugin {0}", mergePath);
                 using (StreamReader reader = File.OpenText(mergePath + "/map.json"))
                 {
                     JObject o = (JObject)JToken.ReadFrom(new JsonTextReader(reader));
