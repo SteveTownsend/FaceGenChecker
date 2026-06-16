@@ -19,7 +19,11 @@ namespace FaceGenChecker
         {
             get => _state!;
         }
-        private static MergeInfo? _mergeInfo;
+        internal static MergeInfo? _mergeInfo;
+        public static MergeInfo MergeInfo
+        {
+            get => _mergeInfo!;
+        }
         public static Task<int> Main(string[] args)
         {
             return SynthesisPipeline.Instance.SetTypicalOpen(GameRelease.SkyrimSE, "FaceGenChecker.esp")

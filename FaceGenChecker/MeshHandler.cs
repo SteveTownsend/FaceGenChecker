@@ -91,16 +91,38 @@ namespace FaceGenChecker
                 {
                     return false;
                 }
-                _settings.diagnostics.logger.WriteLine("NPC {0}/{1:X8} in {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, context.ModKey.FileName);
+                _settings.diagnostics.logger.WriteLine("{0} in {2}", npc, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
+                var updatedHeadParts = new HashSet<IHeadPartGetter>();
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
-                    _settings.diagnostics.logger.WriteLine("  HeadPart {0}/{1:X8}/{2}", headPart.FormKey.ModKey.FileName, headPart.FormKey.ID, headPart.EditorID);
-                    if (headPart.EditorID.Contains(DuplicateTag))
+                    _settings.diagnostics.logger.WriteLine("  HeadPart {0}", headPart);
+                    int index = headPart.EditorID.IndexOf(DuplicateTag);
+                    if (index != -1)
                     {
-                        // possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
-                        _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
+                        // Check for possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
+                        if (_settings.control.FixMergedEditorID)
+                        {
+                            if (!updatedHeadParts.Contains(headPart))
+                            {
+                                // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
+                                // revert the EditorID in our Synthesis patch
+                                if (Program.MergeInfo.MergedPlugins.ContainsKey(headPart.FormKey.ModKey.FileName.String))
+                                {
+                                    string originalName = headPart.EditorID.Substring(0, index);
+                                    HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
+                                    renamed.EditorID = originalName;
+                                    _settings.diagnostics.logger.WriteLine("  EditorID was {0}, now {1}", headPart.EditorID, originalName);
+                                }
+                                // store the updated HeadPart for use in validation
+                                updatedHeadParts.Add(headPart);
+                            }
+                        }
+                        else
+                        {
+                            _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
+                        }
                     }
                     headParts.Add(headPart);
                 }
