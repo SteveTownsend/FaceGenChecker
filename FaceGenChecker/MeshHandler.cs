@@ -108,7 +108,7 @@ namespace FaceGenChecker
                             {
                                 // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
                                 // revert the EditorID in our Synthesis patch
-                                if (Program.MergeInfo.MergedPlugins.ContainsKey(headPart.FormKey.ModKey.FileName.String))
+                                if (Program.MergeInfo.MergeResults.Contains(headPart.FormKey.ModKey.FileName.String))
                                 {
                                     string originalName = headPart.EditorID.Substring(0, index);
                                     HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);

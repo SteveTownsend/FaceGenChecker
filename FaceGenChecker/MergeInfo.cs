@@ -9,6 +9,7 @@ namespace FaceGenChecker
     public class MergeInfo
     {
         public ISet<string> MergePaths { get; } = new HashSet<string>();
+        public ISet<string> MergeResults { get; } = new HashSet<string>();
         public IDictionary<string, string> MergedPlugins { get; } = new Dictionary<string, string>(
             StringComparer.InvariantCultureIgnoreCase);
         public IDictionary<string, IDictionary<string, string>> MappedFormIds { get; } = new Dictionary<string, IDictionary<string, string>>(
@@ -36,9 +37,10 @@ namespace FaceGenChecker
                         JValue mergeInput = (JValue)plugin["filename"]!;
                         MergedPlugins.Add(mergeInput.Value<string>()!, (string)mergeResult!);
                     }
+                    MergeResults.Add(mergeResult.Value<string>());
                 }
                 MergePaths.Add(mergePath);
-                Console.WriteLine("Found possible merged plugin {0}", mergePath);
+                Program.settings.diagnostics.logger.WriteLine("Found possible merged plugin {0}", mergePath);
                 using (StreamReader reader = File.OpenText(mergePath + "/map.json"))
                 {
                     JObject o = (JObject)JToken.ReadFrom(new JsonTextReader(reader));
