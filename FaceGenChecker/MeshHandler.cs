@@ -91,7 +91,7 @@ namespace FaceGenChecker
                 {
                     return false;
                 }
-                _settings.diagnostics.logger.WriteLine("{0} in {2}", npc, context.ModKey.FileName);
+                _settings.diagnostics.logger.WriteLine("{0} in {1}", npc, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
                 var updatedHeadParts = new HashSet<IHeadPartGetter>();
                 foreach (var headPartLink in npc.HeadParts)
