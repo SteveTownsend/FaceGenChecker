@@ -34,11 +34,6 @@ namespace FaceGenChecker
 
         private HashSet<INpcGetter> npcs = new HashSet<INpcGetter>();
         private IDictionary<FormKey, ICollection<IHeadPartGetter>> headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
-        private HashSet<HeadPart.TypeEnum> validParts = new HashSet<HeadPart.TypeEnum>
-        { HeadPart.TypeEnum.Eyebrows,
-            HeadPart.TypeEnum.Eyes,
-            HeadPart.TypeEnum.Face,
-            HeadPart.TypeEnum.Hair };
 
         private int countSkipped;
         private int countCandidates;
@@ -101,8 +96,6 @@ namespace FaceGenChecker
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
-                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
-                        continue;
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}/{1:X8}/{2}", headPart.FormKey.ModKey.FileName, headPart.FormKey.ID, headPart.EditorID);
                     if (headPart.EditorID.Contains(DuplicateTag))
                     {
@@ -169,12 +162,12 @@ namespace FaceGenChecker
                 // all plugin headparts must be present in the NIF
                 if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
                 {
-                    _settings.diagnostics.logger.WriteLine("  {0} forwarded, headparts mismatched", npc);
+                    _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
                     _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
                 }
                 else
                 {
-                    _settings.diagnostics.logger.WriteLine("  headpart match, should be OK in game");
+                    _settings.diagnostics.logger.WriteLine("{0} headpart match, should be OK in game");
                 }
             }
             catch (Exception e)
