@@ -35,6 +35,14 @@ namespace FaceGenChecker
 
         private HashSet<INpcGetter> npcs = new HashSet<INpcGetter>();
         private IDictionary<FormKey, ICollection<IHeadPartGetter>> headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
+        private HashSet<HeadPart.TypeEnum> validParts = new HashSet<HeadPart.TypeEnum>
+        {
+            HeadPart.TypeEnum.Eyebrows,
+            HeadPart.TypeEnum.Eyes,
+            HeadPart.TypeEnum.Face,
+            HeadPart.TypeEnum.Hair,
+            HeadPart.TypeEnum.FacialHair
+        };
 
         private int countSkipped;
         private int countCandidates;
@@ -98,6 +106,8 @@ namespace FaceGenChecker
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
+                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
+                        continue;
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}", headPart);
                     int index = headPart.EditorID.IndexOf(DuplicateTag);
                     if (index != -1)
