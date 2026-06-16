@@ -149,17 +149,17 @@ namespace FaceGenChecker
                             }
                             if (!headPartFound)
                             {
-                                _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF not matched", headPartName);
+                                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF not matched", npc, headPartName);
                                 ++mismatches;
                             }
                             else
                             {
-                                _settings.diagnostics.logger.WriteLine("  HeadPart {0} in NIF matched", headPartName);
+                                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF matched", npc, headPartName);
                             }
                         }
                     }
                 }
-                // all plugin headparts must be present in the NIF
+                // all plugin headparts must be present in the NIF, while the NIF may contain 'defaults' not present in the NPC_ record
                 if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
                 {
                     _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
@@ -167,7 +167,7 @@ namespace FaceGenChecker
                 }
                 else
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} headpart match, should be OK in game");
+                    _settings.diagnostics.logger.WriteLine("{0} headpart match, should be OK in game", npc);
                 }
             }
             catch (Exception e)

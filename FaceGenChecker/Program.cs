@@ -19,6 +19,7 @@ namespace FaceGenChecker
         {
             get => _state!;
         }
+        private static MergeInfo? _mergeInfo;
         public static Task<int> Main(string[] args)
         {
             return SynthesisPipeline.Instance.SetTypicalOpen(GameRelease.SkyrimSE, "FaceGenChecker.esp")
@@ -39,6 +40,7 @@ namespace FaceGenChecker
             stopWatch.Start();
 
             _state = state;
+            _mergeInfo = new MergeInfo(settings.paths.ConflictWinnerLocation);
 
             // Analyze records in scope for models and textures
             MeshHandler meshHandler = new MeshHandler(settings, state);
