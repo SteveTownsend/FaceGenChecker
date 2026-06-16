@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Mutagen.Bethesda.Synthesis.Settings;
 
-namespace FaceGenChecker
+namespace FaceGenChecker.Settings
 {
     public class Diagnostics
     {

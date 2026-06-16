@@ -2,7 +2,7 @@
   "profiles": {
     "FaceGenChecker": {
       "commandName": "Project",
-      "debugEngines": "managed-framework,native"
+      "debugEngines": "managed-dotnet,native"
     }
   }
 }

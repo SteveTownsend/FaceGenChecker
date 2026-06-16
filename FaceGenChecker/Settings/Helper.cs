@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace FaceGenChecker
+namespace FaceGenChecker.Settings
 {
     public class Helper
     {

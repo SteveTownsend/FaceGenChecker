@@ -11,8 +11,8 @@ namespace FaceGenChecker
 {
     public class Program
     {
-        static Lazy<Settings> _settings = null!;
-        static internal Settings settings => _settings.Value;
+        static Lazy<Settings.Settings> _settings = null!;
+        static internal Settings.Settings settings => _settings.Value;
 
         private static IPatcherState<ISkyrimMod, ISkyrimModGetter>? _state;
         public static IPatcherState<ISkyrimMod, ISkyrimModGetter> PatcherState
@@ -40,7 +40,10 @@ namespace FaceGenChecker
             stopWatch.Start();
 
             _state = state;
-            _mergeInfo = new MergeInfo(settings.paths.ConflictWinnerLocation);
+            if  (settings.control.FixMergedEditorID)
+            {
+                _mergeInfo = new MergeInfo(settings.paths.ConflictWinnerLocation);
+            }
 
             // Analyze records in scope for models and textures
             MeshHandler meshHandler = new MeshHandler(settings, state);

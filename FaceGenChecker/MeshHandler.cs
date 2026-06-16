@@ -24,7 +24,7 @@ namespace FaceGenChecker
 {
     public class MeshHandler
     {
-        internal Settings _settings { get; }
+        internal Settings.Settings _settings { get; }
         internal IPatcherState<ISkyrimMod, ISkyrimModGetter> _state { get; }
 
         // use backslashes to match paths in BSA
@@ -40,7 +40,7 @@ namespace FaceGenChecker
         internal int countGenerated;
         private int countFailed;
 
-        internal MeshHandler(Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
+        internal MeshHandler(Settings.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
             _settings = settings;
             _state = state;
