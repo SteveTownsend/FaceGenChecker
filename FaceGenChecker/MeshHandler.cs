@@ -35,13 +35,12 @@ namespace FaceGenChecker
 
         private HashSet<INpcGetter> npcs = new HashSet<INpcGetter>();
         private IDictionary<FormKey, ICollection<IHeadPartGetter>> headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
-        private HashSet<HeadPart.TypeEnum> validParts = new HashSet<HeadPart.TypeEnum>
+        private HashSet<HeadPart.TypeEnum> raceHeadParts = new HashSet<HeadPart.TypeEnum>
         {
             HeadPart.TypeEnum.Eyebrows,
             HeadPart.TypeEnum.Eyes,
             HeadPart.TypeEnum.Face,
-            HeadPart.TypeEnum.Hair,
-            HeadPart.TypeEnum.FacialHair
+            HeadPart.TypeEnum.Hair
         };
 
         private int countSkipped;
@@ -103,6 +102,8 @@ namespace FaceGenChecker
                 _settings.diagnostics.logger.WriteLine("{0} in {1}", npc, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
                 var updatedHeadParts = new HashSet<IHeadPartGetter>();
+                // We must fill in any missing essential HDPTs from NPC's RACE
+                var getFromRace = new HashSet<HeadPart.TypeEnum>(raceHeadParts);
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
@@ -138,9 +139,28 @@ namespace FaceGenChecker
                             _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
                         }
                     }
-                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
-                        continue;
                     headParts.Add(headPart);
+                    getFromRace.Remove((HeadPart.TypeEnum)headPart.Type);
+                }
+                // fill in gaps from RACE record
+                if (getFromRace.Count > 0)
+                {
+                    if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace))
+                    {
+                        var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
+                            npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
+                        foreach (var headPartLink in raceHeadData.HeadParts)
+                        {
+                            if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
+                            {
+                                if (getFromRace.Remove((HeadPart.TypeEnum)raceHeadPart.Record.Type))
+                                {
+                                    _settings.diagnostics.logger.WriteLine("  RACE HeadPart {0}", raceHeadPart);
+                                    headParts.Add(raceHeadPart.Record);
+                                }
+                            }
+                        }
+                    }
                 }
                 headPartsByNpc.Add(npc.FormKey, headParts);
                 npcs.Add(npc);
@@ -164,41 +184,54 @@ namespace FaceGenChecker
                 using var rootNode = nif.FindBlockByNameNiNode(FaceGenRootNode);
                 if (rootNode is null)
                     return;
-
-                using var header = nif.GetHeader();
-                using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
-                using var childNodes = rootNode.GetChildren().GetRefs();
                 UInt32 mismatches = 0;
-                foreach (var childNode in childNodes)
+                foreach (var headPart in headParts)
                 {
-                    using (childNode)
+                    using var headPartNode = nif.FindBlockByNameNiNode(headPart.EditorID);
+                    if (headPartNode is null)
                     {
-                        using NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
-                        if (nodeBlock != null)
-                        {
-                            using var blockName = nodeBlock.name;
-                            bool headPartFound = false;
-                            var headPartName = blockName.get();
-                            foreach (var headPart in headParts)
-                            {
-                                headPartFound = headPart.EditorID == headPartName;
-                                if (headPartFound)
-                                    break;
-                            }
-                            if (!headPartFound)
-                            {
-                                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF not matched", npc, headPartName);
-                                ++mismatches;
-                            }
-                            else
-                            {
-                                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF matched", npc, headPartName);
-                            }
-                        }
+                        _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} not matched in NIF", npc, headPart.EditorID);
+                        ++mismatches;
+                    }
+                    else
+                    {
+                        _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} matched in NIF matched", npc, headPart.EditorID);
                     }
                 }
+
+                //using var header = nif.GetHeader();
+                //using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
+                //using var childNodes = rootNode.GetChildren().GetRefs();
+                //foreach (var childNode in childNodes)
+                //{
+                //    using (childNode)
+                //    {
+                //        using NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
+                //        if (nodeBlock != null)
+                //        {
+                //            using var blockName = nodeBlock.name;
+                //            bool headPartFound = false;
+                //            var headPartName = blockName.get();
+                //            foreach (var headPart in headParts)
+                //            {
+                //                headPartFound = headPart.EditorID == headPartName;
+                //                if (headPartFound)
+                //                    break;
+                //            }
+                //            if (!headPartFound)
+                //            {
+                //                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF not matched", npc, headPartName);
+                //                ++mismatches;
+                //            }
+                //            else
+                //            {
+                //                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF matched", npc, headPartName);
+                //            }
+                //        }
+                //    }
+                //}
                 // all plugin headparts must be present in the NIF, while the NIF may contain 'defaults' not present in the NPC_ record
-                if (childNodes.Count < headParts.Count || mismatches != childNodes.Count - headParts.Count)
+                if (mismatches > 0)
                 {
                     _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
                     _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
