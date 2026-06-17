@@ -106,9 +106,8 @@ namespace FaceGenChecker
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
-                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
-                        continue;
                     _settings.diagnostics.logger.WriteLine("  HeadPart {0}", headPart);
+                    // every HDPT has to be checked for ZMerge/CK munging
                     int index = headPart.EditorID.IndexOf(DuplicateTag);
                     if (index != -1)
                     {
@@ -139,6 +138,8 @@ namespace FaceGenChecker
                             _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
                         }
                     }
+                    if (!validParts.Contains((HeadPart.TypeEnum)headPart.Type))
+                        continue;
                     headParts.Add(headPart);
                 }
                 headPartsByNpc.Add(npc.FormKey, headParts);
