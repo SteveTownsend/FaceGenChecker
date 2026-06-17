@@ -3,7 +3,7 @@ using Mutagen.Bethesda.Synthesis.Settings;
 
 namespace FaceGenChecker.Settings
 {
-    internal class Settings
+    public class Settings
     {
         [SynthesisSettingName("Control")]
         public Control control { get; set; } = new Control();
