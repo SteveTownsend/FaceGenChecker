@@ -1,26 +1,18 @@
-﻿using IniParser;
-using IniParser.Model.Configuration;
-using IniParser.Parser;
-using Mutagen.Bethesda;
+﻿using Mutagen.Bethesda;
 using Mutagen.Bethesda.Archives;
-using Mutagen.Bethesda.Inis;
-using Mutagen.Bethesda.Inis.DI;
 using Mutagen.Bethesda.Plugins;
-using Mutagen.Bethesda.Plugins.Aspects;
+using Mutagen.Bethesda.Plugins.Cache.Internals.Implementations;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using nifly;
 using Noggog;
-using Noggog.Utility;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using SSEForms = Mutagen.Bethesda.FormKeys.SkyrimSE;
 
 namespace FaceGenChecker
 {
@@ -28,6 +20,7 @@ namespace FaceGenChecker
     {
         internal Settings.Settings _settings { get; }
         internal IPatcherState<ISkyrimMod, ISkyrimModGetter> _state { get; }
+        private ImmutableLoadOrderLinkUsageCache _references;
 
         // use backslashes to match paths in BSA
         public static readonly string MeshPrefix = "meshes\\actors\\character\\facegendata\\facegeom\\";
@@ -53,6 +46,7 @@ namespace FaceGenChecker
         {
             _settings = settings;
             _state = state;
+            _references = new ImmutableLoadOrderLinkUsageCache(_state.LinkCache);
         }
 
         // no blacklist for NPC or Race at this time
@@ -61,33 +55,71 @@ namespace FaceGenChecker
             // ignore presets
             if (npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.IsCharGenFacePreset))
             {
-                _settings.diagnostics.logger.WriteLine("Skip Preset {0}", npc.FormKey);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - Preset", npc.FormKey);
                 return false;
             }
             // ignore player
             if (npc.FormKey.ID == 7 && npc.FormKey.ModKey.FileName.String.Equals("skyrim.esm", StringComparison.InvariantCultureIgnoreCase))
             {
-                _settings.diagnostics.logger.WriteLine("Skip Player {0}", npc.FormKey);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - Player", npc);
                 return false;
             }
             // ignore if this uses template NPC_ record's traits
             if (npc.Configuration.TemplateFlags.HasFlag(NpcConfiguration.TemplateFlag.Traits))
             {
-                _settings.diagnostics.logger.WriteLine("Skip NPC using template traits {0}", npc.FormKey);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - uses template traits", npc);
+                return false;
+            }
+            // ignore Ghost NPCs
+            if (npc.HasKeyword("ActorTypeGhost", _state.LinkCache))
+            {
+                _settings.diagnostics.logger.WriteLine("Skip {0} - Ghost", npc);
                 return false;
             }
             // ignore unless NPC_'s Race has head data
             IRaceGetter race = npc.Race.Resolve<IRaceGetter>(_state.LinkCache);
             if (race is null || !race.Flags.HasFlag(Race.Flag.FaceGenHead))
             {
-                _settings.diagnostics.logger.WriteLine("Skip NPC with no facegen {0}", npc.FormKey);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - no facegen in {1}", npc, race);
                 return false;
             }
-            // ignore Ghost NPCs
-            if (npc.HasKeyword("ActorTypeGhost", _state.LinkCache))
+            // skip if RACE record has no Head Parts
+            if (race.HeadData is null)
             {
-                _settings.diagnostics.logger.WriteLine("Skip Ghost {0}", npc.FormKey);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - no headparts in {}", npc, race);
                 return false;
+            }
+            // Do not process unused NPCs
+            var npcUsers = _references.GetUsagesOf(npc);
+            if (npcUsers.UsageLinks.Count == 0)
+            {
+                _settings.diagnostics.logger.WriteLine("Skip {0} - unreferenced", npc);
+                return false;
+            }
+            var usagesByNpc = _references.GetUsagesOf<INpcGetter>(npc).UsageLinks;
+            foreach (var usageByNpc in usagesByNpc)
+            {
+                // referencing NPC must be in use to be of interest
+                if (_references.GetUsagesOf(usageByNpc).UsageLinks.Count == 0)
+                {
+                    continue;
+                }
+                if (usageByNpc.TryResolveSimpleContext(_state.LinkCache, out var winningUser) &&
+                    winningUser.Record.Configuration.TemplateFlags.HasFlag(NpcConfiguration.TemplateFlag.Traits))
+                {
+                    _settings.diagnostics.logger.WriteLine("Keep {0} - template traits used in {1}", npc, winningUser);
+                    return true;
+                }
+            }
+            if (_references.GetUsagesOf<IPlacedNpcGetter>(npc).UsageLinks.Count > 0)
+            {
+                _settings.diagnostics.logger.WriteLine("Keep {0} - has Placed Actor(s)", npc);
+                return true;
+            }
+            if (_references.GetUsagesOf<ILeveledNpcGetter>(npc).UsageLinks.Count > 0)
+            {
+                _settings.diagnostics.logger.WriteLine("Keep {0} - uses by Leveled NPC(s)", npc);
+                return true;
             }
             return true;
         }
@@ -100,7 +132,7 @@ namespace FaceGenChecker
                 {
                     return false;
                 }
-                _settings.diagnostics.logger.WriteLine("{0} in {1}", npc, context.ModKey.FileName);
+                _settings.diagnostics.logger.WriteLine("{0} winning override in {1}", npc, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
                 var updatedHeadParts = new HashSet<IHeadPartGetter>();
                 // We must fill in any missing essential HDPTs from NPC's RACE
@@ -108,7 +140,7 @@ namespace FaceGenChecker
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
-                    _settings.diagnostics.logger.WriteLine("  HeadPart {0}", headPart);
+                    _settings.diagnostics.logger.WriteLine("  {0}", headPart);
                     // every HDPT has to be checked for ZMerge/CK munging
                     int index = headPart.EditorID.IndexOf(DuplicateTag);
                     if (index != -1)
@@ -158,7 +190,7 @@ namespace FaceGenChecker
                                 {
                                     if (getFromRace.Remove((HeadPart.TypeEnum)raceHeadPart.Record.Type))
                                     {
-                                        _settings.diagnostics.logger.WriteLine("  RACE HeadPart {0}", raceHeadPart);
+                                        _settings.diagnostics.logger.WriteLine("  RACE {0}", raceHeadPart.Record);
                                         headParts.Add(raceHeadPart.Record);
                                     }
                                 }
@@ -172,7 +204,7 @@ namespace FaceGenChecker
             }
             else
             {
-                _settings.diagnostics.logger.WriteLine("Failed to resolve NPC {0}/{1:X8}", npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                _settings.diagnostics.logger.WriteLine("Failed to resolve {0}", npc);
                 return false;
             }
         }
@@ -191,15 +223,15 @@ namespace FaceGenChecker
                 UInt32 mismatches = 0;
                 foreach (var headPart in headParts)
                 {
-                    using var headPartNode = nif.FindBlockByNameNiNode(headPart.EditorID);
+                    using var headPartNode = nif.FindBlockByNameNiAVObject(headPart.EditorID);
                     if (headPartNode is null)
                     {
-                        _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} not matched in NIF", npc, headPart.EditorID);
+                        _settings.diagnostics.logger.WriteLine("{0} {1} no match in NIF", npc, headPart);
                         ++mismatches;
                     }
                     else
                     {
-                        _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} matched in NIF matched", npc, headPart.EditorID);
+                        _settings.diagnostics.logger.WriteLine("{0} {1} has match in NIF", npc, headPart);
                     }
                 }
 
@@ -398,7 +430,7 @@ namespace FaceGenChecker
                 string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
                 if (File.Exists(fullPath))
                 {
-                    _settings.diagnostics.logger.WriteLine("Found mesh for {0}/{1:X8} in loose file {2}", npc.FormKey.ModKey.Name, npc.FormKey.ID, fullPath);
+                    _settings.diagnostics.logger.WriteLine("Found mesh for {0} in loose file {1}", npc, fullPath);
 
                     using NifFile nif = new NifFile();
                     nif.Load(fullPath);
@@ -408,7 +440,7 @@ namespace FaceGenChecker
                 else
                 {
                     // check for this file in archives
-                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0}/{1:X8} with mesh file {2}", npc.FormKey.ModKey.FileName, npc.FormKey.ID, relativePath);
+                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0} with mesh file {1}", npc, relativePath);
                     bsaFiles.Add(relativePath.ToLower(), npc);
                 }
             });
@@ -423,10 +455,10 @@ namespace FaceGenChecker
                 {
                     _settings.diagnostics.logger.WriteLine("Processing {0} BSA files:", archivePaths.Count());
 
-                    archivePaths.ForEach(x => _settings.diagnostics.logger.WriteLine("\t{0}", x));
+                    archivePaths.ForEach(x => _settings.diagnostics.logger.WriteLine("  {0}", x));
                 }
-                // Introspect all known BSAs to locate meshes not found as loose files. Dups are ignored - first find wins.
-                foreach (var bsaFile in archivePaths)
+                // Introspect all known BSAs to locate meshes not found as loose files. Dups are ignored - first find wins, so we scan from the end of the list
+                foreach (var bsaFile in archivePaths.Reverse())
                 {
                     var bsaReader = Archive.CreateReader(_state.GameRelease, bsaFile);
                     bsaReader.Files.AsParallel().
@@ -461,6 +493,14 @@ namespace FaceGenChecker
                             }
                         }
                     );
+                }
+                // alter for any missed meshes
+                foreach (var required in bsaFiles)
+                {
+                    if (!bsaDone.ContainsKey(required.Key))
+                    {
+                        _settings.diagnostics.logger.WriteLine(" No NIF found for NPC {0}", required.Value.FormKey);
+                    }
                 }
             }
 

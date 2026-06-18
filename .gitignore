@@ -58,3 +58,6 @@ nunit-*.xml
 /.vs
 /*.htm
 /Backup
+/FaceGenChecker/FaceGenChecker.csproj.user
+/FaceGenChecker/Properties/PublishProfiles/FolderProfile.pubxml
+/FaceGenChecker/Properties/PublishProfiles/FolderProfile.pubxml.user
