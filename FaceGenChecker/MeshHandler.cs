@@ -15,6 +15,7 @@ using Noggog.Utility;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -149,14 +150,17 @@ namespace FaceGenChecker
                     {
                         var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
                             npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
-                        foreach (var headPartLink in raceHeadData.HeadParts)
+                        if (raceHeadData is not null)
                         {
-                            if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
+                            foreach (var headPartLink in raceHeadData.HeadParts)
                             {
-                                if (getFromRace.Remove((HeadPart.TypeEnum)raceHeadPart.Record.Type))
+                                if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
                                 {
-                                    _settings.diagnostics.logger.WriteLine("  RACE HeadPart {0}", raceHeadPart);
-                                    headParts.Add(raceHeadPart.Record);
+                                    if (getFromRace.Remove((HeadPart.TypeEnum)raceHeadPart.Record.Type))
+                                    {
+                                        _settings.diagnostics.logger.WriteLine("  RACE HeadPart {0}", raceHeadPart);
+                                        headParts.Add(raceHeadPart.Record);
+                                    }
                                 }
                             }
                         }
