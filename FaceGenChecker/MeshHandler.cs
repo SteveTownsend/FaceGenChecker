@@ -145,7 +145,7 @@ namespace FaceGenChecker
                 // fill in gaps from RACE record
                 if (getFromRace.Count > 0)
                 {
-                    if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace))
+                    if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace) && npcRace.Record.HeadData is not null)
                     {
                         var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
                             npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
