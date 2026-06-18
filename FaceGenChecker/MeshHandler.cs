@@ -223,6 +223,12 @@ namespace FaceGenChecker
                 UInt32 mismatches = 0;
                 foreach (var headPart in headParts)
                 {
+                    // skip HDPT with no model
+                    if (headPart.Model is null)
+                    {
+                        _settings.diagnostics.logger.WriteLine("{0} {1} skipped, no Model", npc, headPart);
+                        continue;
+                    }
                     using var headPartNode = nif.FindBlockByNameNiAVObject(headPart.EditorID);
                     if (headPartNode is null)
                     {
