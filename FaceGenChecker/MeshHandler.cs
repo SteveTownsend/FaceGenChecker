@@ -23,24 +23,25 @@ namespace FaceGenChecker
         private ImmutableLoadOrderLinkUsageCache _references;
 
         // use backslashes to match paths in BSA
-        public static readonly string MeshPrefix = "meshes\\actors\\character\\facegendata\\facegeom\\";
-        public static readonly string FaceGenRootNode = "BSFaceGenNiNodeSkinned";
-        public static readonly string DuplicateTag = "DUPLICATE";
+        public static readonly string _MeshPrefix = "meshes\\actors\\character\\facegendata\\facegeom\\";
+        public static readonly string _FaceGenRootNode = "BSFaceGenNiNodeSkinned";
+        public static readonly string _DuplicateTag = "DUPLICATE";
 
-        private HashSet<INpcGetter> npcs = new HashSet<INpcGetter>();
-        private IDictionary<FormKey, ICollection<IHeadPartGetter>> headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
-        private HashSet<HeadPart.TypeEnum> raceHeadParts = new HashSet<HeadPart.TypeEnum>
+        private HashSet<INpcGetter> _npcs = new HashSet<INpcGetter>();
+        private IDictionary<FormKey, ICollection<IHeadPartGetter>> _headPartsByNpc = new Dictionary<FormKey, ICollection<IHeadPartGetter>>();
+        private HashSet<HeadPart.TypeEnum> _raceHeadParts = new HashSet<HeadPart.TypeEnum>
         {
             HeadPart.TypeEnum.Eyebrows,
             HeadPart.TypeEnum.Eyes,
             HeadPart.TypeEnum.Face,
             HeadPart.TypeEnum.Hair
         };
+        HashSet<FormKey> _checkedHeadPartDuplicates = new HashSet<FormKey>();
 
-        private int countSkipped;
-        private int countCandidates;
-        internal int countGenerated;
-        private int countFailed;
+        private int _countSkipped;
+        private int _countCandidates;
+        internal int _countGenerated;
+        private int _countFailed;
 
         internal MeshHandler(Settings.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
@@ -134,44 +135,12 @@ namespace FaceGenChecker
                 }
                 _settings.diagnostics.logger.WriteLine("{0} winning override in {1}", npc, context.ModKey.FileName);
                 var headParts = new HashSet<IHeadPartGetter>();
-                var updatedHeadParts = new HashSet<IHeadPartGetter>();
                 // We must fill in any missing essential HDPTs from NPC's RACE
-                var getFromRace = new HashSet<HeadPart.TypeEnum>(raceHeadParts);
+                var getFromRace = new HashSet<HeadPart.TypeEnum>(_raceHeadParts);
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
                     _settings.diagnostics.logger.WriteLine("  {0}", headPart);
-                    // every HDPT has to be checked for ZMerge/CK munging
-                    int index = headPart.EditorID.IndexOf(DuplicateTag);
-                    if (index != -1)
-                    {
-                        // Check for possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
-                        if (_settings.control.FixMergedEditorID)
-                        {
-                            if (!updatedHeadParts.Contains(headPart))
-                            {
-                                // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
-                                // revert the EditorID in our Synthesis patch
-                                if (Program.MergeInfo.MergeResults.Contains(headPart.FormKey.ModKey.FileName.String))
-                                {
-                                    string originalName = headPart.EditorID.Substring(0, index);
-                                    HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
-                                    renamed.EditorID = originalName;
-                                    _settings.diagnostics.logger.WriteLine("  EditorID was {0}, now {1}", headPart.EditorID, originalName);
-                                    // store the updated HeadPart for use in validation
-                                    updatedHeadParts.Add(renamed);
-                                }
-                                else
-                                {
-                                    updatedHeadParts.Add(headPart);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
-                        }
-                    }
                     headParts.Add(headPart);
                     getFromRace.Remove((HeadPart.TypeEnum)headPart.Type);
                 }
@@ -198,8 +167,8 @@ namespace FaceGenChecker
                         }
                     }
                 }
-                headPartsByNpc.Add(npc.FormKey, headParts);
-                npcs.Add(npc);
+                _headPartsByNpc.Add(npc.FormKey, headParts);
+                _npcs.Add(npc);
                 return true;
             }
             else
@@ -216,11 +185,9 @@ namespace FaceGenChecker
             {
                 // match head parts with the winning NPC record's list
                 _settings.diagnostics.logger.WriteLine("Check HeadParts in NIF {0} vs {1}", originalPath, npc);
-                var headParts = headPartsByNpc[npc.FormKey];
-                using var rootNode = nif.FindBlockByNameNiNode(FaceGenRootNode);
-                if (rootNode is null)
-                    return;
+                var headParts = _headPartsByNpc[npc.FormKey];
                 UInt32 mismatches = 0;
+                IDictionary<IHeadPartGetter, string> tryMatchInNif = new Dictionary<IHeadPartGetter, string>();
                 foreach (var headPart in headParts)
                 {
                     // skip HDPT with no model
@@ -232,47 +199,106 @@ namespace FaceGenChecker
                     using var headPartNode = nif.FindBlockByNameNiAVObject(headPart.EditorID);
                     if (headPartNode is null)
                     {
-                        _settings.diagnostics.logger.WriteLine("{0} {1} no match in NIF", npc, headPart);
-                        ++mismatches;
+                        bool matched = false;
+                        if (_settings.control.FixMergedEditorID)
+                        {
+                            // mismatch on HDPT may be due to ZMerge/CK EditorID munging, try to remediate
+                            int index = headPart.EditorID.IndexOf(_DuplicateTag);
+                            if (index != -1)
+                            {
+                                string originalName = headPart.EditorID.Substring(0, index);
+                                if (!_checkedHeadPartDuplicates.TryGetValue(headPart.FormKey, out var existing))
+                                {
+                                    // Check for possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
+
+                                    // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
+                                    // revert the EditorID in our Synthesis patch
+                                    if (Program.MergeInfo.MergeResults.Contains(headPart.FormKey.ModKey.FileName.String))
+                                    {
+                                        // Heuristics:
+                                        // - if original EditorID ended in a number it looks like the number gets nuked, so allow fuzzy compare
+                                        // - if original EditorID did not end in a number, merged ID up to 'DUPLICATE' should match exactly and we use it
+                                        using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
+                                        if (originalHeadPart is not null)
+                                        {
+                                            _settings.diagnostics.logger.WriteLine("0} {1} EditorID was {2}, now {3}", headPart.EditorID, originalName);
+                                            HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
+                                            renamed.EditorID = originalName;
+											matched = true;
+                                        }
+                                        else
+                                        {
+                                            tryMatchInNif.Add(headPart, originalName);
+                                        }
+                                    }
+                                    _checkedHeadPartDuplicates.Add(headPart.FormKey);
+                                }
+                            }
+                            else
+                            {
+                                _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
+                            }
+                        }
+                        if (!matched)
+                        {
+                            _settings.diagnostics.logger.WriteLine("{0} {1} no match in NIF", npc, headPart);
+                            ++mismatches;
+                        }
                     }
                     else
                     {
                         _settings.diagnostics.logger.WriteLine("{0} {1} has match in NIF", npc, headPart);
                     }
                 }
-
-                //using var header = nif.GetHeader();
-                //using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
-                //using var childNodes = rootNode.GetChildren().GetRefs();
-                //foreach (var childNode in childNodes)
-                //{
-                //    using (childNode)
-                //    {
-                //        using NiAVObject nodeBlock = blockCache!.EditableBlockById<NiAVObject>(childNode.index);
-                //        if (nodeBlock != null)
-                //        {
-                //            using var blockName = nodeBlock.name;
-                //            bool headPartFound = false;
-                //            var headPartName = blockName.get();
-                //            foreach (var headPart in headParts)
-                //            {
-                //                headPartFound = headPart.EditorID == headPartName;
-                //                if (headPartFound)
-                //                    break;
-                //            }
-                //            if (!headPartFound)
-                //            {
-                //                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF not matched", npc, headPartName);
-                //                ++mismatches;
-                //            }
-                //            else
-                //            {
-                //                _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF matched", npc, headPartName);
-                //            }
-                //        }
-                //    }
-                //}
-                // all plugin headparts must be present in the NIF, while the NIF may contain 'defaults' not present in the NPC_ record
+                // Check Editor ID fuzzy match vs NIF for merged HDPTs that are 'missing'
+                if (tryMatchInNif.Count > 0)
+                {
+                    using var rootNode = nif.FindBlockByNameNiNode(_FaceGenRootNode);
+                    if (rootNode is null)
+                    {
+                        _settings.diagnostics.logger.WriteLine("{0} NIF has no root node {1}", npc, _FaceGenRootNode);
+                    }
+                    else
+                    {
+                        using var header = nif.GetHeader();
+                        using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
+                        using var childNodes = rootNode.GetChildren().GetRefs();
+                        foreach (var childNode in childNodes)
+                        {
+                            using (childNode)
+                            {
+                                using NiAVObject nodeBlock = header.GetBlockById(childNode.index) as NiAVObject;
+                                if (nodeBlock != null)
+                                {
+                                    using var blockName = nodeBlock.name;
+                                    var headPartName = blockName.get();
+                                    foreach (var possibleDup in tryMatchInNif)
+                                    {
+                                        if (headPartName.StartsWith(possibleDup.Value))
+                                        {
+                                            _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF fuzzy matched {2}", npc, headPartName, possibleDup.Value);
+                                            --mismatches;
+                                            
+                                            tryMatchInNif.Remove(possibleDup.Key);
+                                            if (!_checkedHeadPartDuplicates.Contains(possibleDup.Key.FormKey))
+                                            {
+                                                HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(possibleDup.Key);
+                                                renamed.EditorID = headPartName;
+                                                _checkedHeadPartDuplicates.Add(possibleDup.Key.FormKey);
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                foreach (var fuzzyMatcher in tryMatchInNif)
+                {
+                    _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} no fuzzy match on {2} in NIF", npc, fuzzyMatcher.Key, fuzzyMatcher.Value);
+                }
+                // all plugin headparts must be present in the NIF
                 if (mismatches > 0)
                 {
                     _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
@@ -285,155 +311,28 @@ namespace FaceGenChecker
             }
             catch (Exception e)
             {
-                Interlocked.Increment(ref countFailed);
+                Interlocked.Increment(ref _countFailed);
                 _settings.diagnostics.logger.WriteLine("Exception processing {0}: {1}", originalPath, e.GetBaseException());
             }
         }
-
-        /* engine reverts to defaults if it can't read files (the archaic GetPrivateProfile api is used), we might as well 
-         * throw and force the user to sort out their stuff */
-        //internal static string? ReadIniValue(FileIniDataParser a_parser, FilePath a_path, string a_section, string a_key)
-        //{
-        //    var data = a_parser.ReadData(new StreamReader(IFileSystemExt.DefaultFilesystem.File.OpenRead(a_path)));
-
-        //    var section = data[a_section];
-        //    if (section != null)
-        //    {
-        //        return section[a_key];
-        //    }
-        //    else
-        //    {
-        //        return null;
-        //    }
-        //}
-
-        //// get a value from the winning mod ini override or Skyrim.ini if none exist
-        //internal static string? GetWinningIniValue(GameRelease a_gameRelease, string a_section, string a_key)
-        //{
-        //    IniParserConfiguration parserConfig = new()
-        //    {
-        //        AllowDuplicateKeys = true,
-        //        AllowDuplicateSections = true,
-        //        AllowKeysWithoutSection = true,
-        //        AllowCreateSectionsOnFly = true,
-        //        CaseInsensitive = true,
-        //        SkipInvalidLines = true,
-        //    };
-        //    var parser = new FileIniDataParser(new IniDataParser(parserConfig));
-
-        //    foreach (var e in ScriptLess.PatcherState.LoadOrder.PriorityOrder)
-        //    {
-        //        if (!e.Enabled)
-        //        {
-        //            continue;
-        //        }
-
-        //        FilePath path = Path.Combine(ScriptLess.PatcherState.DataFolderPath, e.ModKey.Name + ".ini");
-
-        //        if (!path.CheckExists())
-        //        {
-        //            continue;
-        //        }
-
-        //        var value = ReadIniValue(parser, path, a_section, a_key);
-        //        if (value != null)
-        //        {
-        //            return value;
-        //        }
-        //    }
-
-        //    FilePath basePath = Ini.GetTypicalPath(a_gameRelease);
-
-        //    return ReadIniValue(parser, basePath, a_section, a_key);
-        //}
-
-        //public enum ResourceArchiveList
-        //{
-        //    Primary,
-        //    Secondary
-        //};
-
-        //// retrieve a list, parse comma-delimited filenames, prune zero-length strings and non-existent paths and return as FilePath list
-        //internal static List<FilePath>? GetResourceArchiveList(GameRelease a_gameRelease, ResourceArchiveList a_list)
-        //{
-        //    string key = a_list == ResourceArchiveList.Secondary ?
-        //        "sResourceArchiveList2" :
-        //        "sResourceArchiveList";
-
-        //    return
-        //        GetWinningIniValue(a_gameRelease, "Archive", key)?
-        //        .Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-        //        .Select(x => new FilePath(Path.Combine(ScriptLess.PatcherState.DataFolderPath, x)))
-        //        .Where(x => x.CheckExists())
-        //        .ToList();
-        //}
-
-        //internal static List<FilePath> GetBaseArchivePaths(GameRelease a_gameRelease)
-        //{
-        //    var l1 = GetResourceArchiveList(a_gameRelease, ResourceArchiveList.Primary);
-        //    var l2 = GetResourceArchiveList(a_gameRelease, ResourceArchiveList.Secondary);
-
-        //    return l1.EmptyIfNull().And(l2.EmptyIfNull()).ToList();
-        //}
-
-        //internal static List<FilePath> GetPossibleModArchives(GameRelease a_gameRelease, ModKey a_modKey)
-        //{
-        //    var ext = Archive.GetExtension(a_gameRelease);
-
-        //    return new()
-        //    {
-        //        Path.Combine(ScriptLess.PatcherState.DataFolderPath, a_modKey.Name + ext),
-        //        Path.Combine(ScriptLess.PatcherState.DataFolderPath, a_modKey.Name + " - Textures" + ext)
-        //    };
-        //}
-
-        //// get archive path list according to load order
-        //internal static List<FilePath> GetOrderedArchivePaths(GameRelease a_gameRelease)
-        //{
-        //    var result = GetBaseArchivePaths(a_gameRelease);
-
-        //    ScriptLess.PatcherState.LoadOrder.ListedOrder.ForEach(x =>
-        //    {
-        //        if (x.Enabled)
-        //        {
-        //            result.AddRange(
-        //                GetPossibleModArchives(a_gameRelease, x.ModKey)
-        //                .Where(y => y.CheckExists() && !result.Contains(y)));
-        //        }
-        //    });
-
-        //    return result;
-        //}
-
-        //// get priority archive path list 
-        //internal static List<FilePath> GetPriorityArchivePaths(GameRelease a_gameRelease)
-        //{
-        //    var result = GetOrderedArchivePaths(a_gameRelease);
-
-        //    result.Reverse();
-
-        //    return result;
-        //}
-
-        // Mesh Generation logic originally from 'AllGUD Weapon Mesh Generator.pas'
         internal void ProcessMeshes()
         {
             // no op if empty
-            if (npcs.Count == 0)
+            if (_npcs.Count == 0)
             {
                 _settings.diagnostics.logger.WriteLine("No NPCs found");
                 return;
             }
             IDictionary<string, INpcGetter> bsaFiles = new ConcurrentDictionary<string, INpcGetter>();
-            int totalNPCs = npcs.Count;
+            int totalNPCs = _npcs.Count;
 
             IDictionary<INpcGetter, byte> looseDone = new ConcurrentDictionary<INpcGetter, byte>();
-            Parallel.ForEach(npcs, npc =>
+            Parallel.ForEach(_npcs, npc =>
             {
                 // loose file wins over BSA contents
-                string relativePath = String.Format("{0}{1}\\{2:X8}.nif", MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                string relativePath = String.Format("{0}{1}\\{2:X8}.nif", _MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
                 string fullPath = String.Format("{0}/{1}", _settings.paths.ConflictWinnerLocation, relativePath);
-                string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
+                string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, _MeshPrefix, npc.FormKey.ModKey.FileName, npc.FormKey.ID);
                 if (File.Exists(fullPath))
                 {
                     _settings.diagnostics.logger.WriteLine("Found mesh for {0} in loose file {1}", npc, fullPath);
@@ -511,7 +410,7 @@ namespace FaceGenChecker
             }
 
             _settings.diagnostics.logger.WriteLine("Generated {0}, Candidates {1}, Skipped {2}, Failed {3}",
-                countGenerated, countCandidates, countSkipped, countFailed);
+                _countGenerated, _countCandidates, _countSkipped, _countFailed);
         }
 
         internal void Analyze()
