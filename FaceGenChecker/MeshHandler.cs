@@ -86,7 +86,7 @@ namespace FaceGenChecker
             // skip if RACE record has no Head Parts
             if (race.HeadData is null)
             {
-                _settings.diagnostics.logger.WriteLine("Skip {0} - no headparts in {}", npc, race);
+                _settings.diagnostics.logger.WriteLine("Skip {0} - no headparts in {1}", npc, race);
                 return false;
             }
             // Do not process unused NPCs
