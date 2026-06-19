@@ -206,6 +206,7 @@ namespace FaceGenChecker
                             int index = headPart.EditorID.IndexOf(_DuplicateTag);
                             if (index != -1)
                             {
+                                _settings.diagnostics.logger.WriteLine("{0} {1} possible duplicate renamed in CK");
                                 string originalName = headPart.EditorID.Substring(0, index);
                                 if (!_checkedHeadPartDuplicates.TryGetValue(headPart.FormKey, out var existing))
                                 {
@@ -221,7 +222,7 @@ namespace FaceGenChecker
                                         using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
                                         if (originalHeadPart is not null)
                                         {
-                                            _settings.diagnostics.logger.WriteLine("0} {1} EditorID was {2}, now {3}", headPart.EditorID, originalName);
+                                            _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
                                             HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
                                             renamed.EditorID = originalName;
 											matched = true;
@@ -233,10 +234,6 @@ namespace FaceGenChecker
                                     }
                                     _checkedHeadPartDuplicates.Add(headPart.FormKey);
                                 }
-                            }
-                            else
-                            {
-                                _settings.diagnostics.logger.WriteLine("    possible duplicate renamed in CK", headPart.EditorID);
                             }
                         }
                         if (!matched)
