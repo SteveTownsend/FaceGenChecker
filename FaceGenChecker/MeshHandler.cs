@@ -206,7 +206,7 @@ namespace FaceGenChecker
                             int index = headPart.EditorID.IndexOf(_DuplicateTag);
                             if (index != -1)
                             {
-                                _settings.diagnostics.logger.WriteLine("{0} {1} possible duplicate renamed in CK");
+                                _settings.diagnostics.logger.WriteLine("{0} {1} possible duplicate renamed in CK", npc, headPart);
                                 string originalName = headPart.EditorID.Substring(0, index);
                                 if (!_checkedHeadPartDuplicates.TryGetValue(headPart.FormKey, out var existing))
                                 {
