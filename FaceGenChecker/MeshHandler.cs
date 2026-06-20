@@ -36,8 +36,7 @@ namespace FaceGenChecker
             HeadPart.TypeEnum.Face,
             HeadPart.TypeEnum.Hair
         };
-        HashSet<FormKey> _checkedHeadPartDuplicates = new HashSet<FormKey>();
-        IDictionary<IHeadPartGetter, byte> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, byte>();
+        IDictionary<IHeadPartGetter, string> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, string>();
 
         private int _countSkipped;
         private int _countCandidates;
@@ -209,34 +208,27 @@ namespace FaceGenChecker
                             {
                                 _settings.diagnostics.logger.WriteLine("{0} {1} possible duplicate renamed in CK", npc, headPart);
                                 string originalName = headPart.EditorID.Substring(0, index);
-                                if (!_checkedHeadPartDuplicates.TryGetValue(headPart.FormKey, out var existing))
-                                {
-                                    // Check for possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
 
-                                    // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
-                                    // revert the EditorID in our Synthesis patch
-                                    if (Program.MergeInfo.MergeResults.Contains(headPart.FormKey.ModKey.FileName.String))
+                                // Check for possible NPC makeover merge rename on save in CK. Save is required to resolve ZMerge HITMEs.
+
+                                // If this HeadPart is in a merge and looks like it was renamed to avoid a clash with existing, 
+                                // revert the EditorID in our Synthesis patch
+                                if (Program.MergeInfo.MergeResults.Contains(headPart.FormKey.ModKey.FileName.String))
+                                {
+                                    // Heuristics:
+                                    // - if original EditorID ended in a number it looks like the number gets nuked, so allow fuzzy compare
+                                    // - if original EditorID did not end in a number, merged ID up to 'DUPLICATE' should match exactly and we use it
+                                    using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
+                                    if (originalHeadPart is not null)
                                     {
-                                        // Heuristics:
-                                        // - if original EditorID ended in a number it looks like the number gets nuked, so allow fuzzy compare
-                                        // - if original EditorID did not end in a number, merged ID up to 'DUPLICATE' should match exactly and we use it
-                                        using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
-                                        if (originalHeadPart is not null)
-                                        {
-                                            if (_renamedHeadParts.TryAdd(headPart, (byte)0))
-                                            {
-                                                _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
-                                                HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
-                                                renamed.EditorID = originalName;
-                                            }
-                                            matched = true;
-                                        }
-                                        else
-                                        {
-                                            tryMatchInNif.Add(headPart, originalName);
-                                        }
+                                        _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
+                                        matched = true;
+                                        _renamedHeadParts.TryAdd(headPart, originalName);
                                     }
-                                    _checkedHeadPartDuplicates.Add(headPart.FormKey);
+                                    else
+                                    {
+                                        tryMatchInNif.Add(headPart, originalName);
+                                    }
                                 }
                             }
                         }
@@ -281,12 +273,7 @@ namespace FaceGenChecker
                                             --mismatches;
                                             
                                             tryMatchInNif.Remove(possibleDup.Key);
-                                            if (!_checkedHeadPartDuplicates.Contains(possibleDup.Key.FormKey))
-                                            {
-                                                HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(possibleDup.Key);
-                                                renamed.EditorID = headPartName;
-                                                _checkedHeadPartDuplicates.Add(possibleDup.Key.FormKey);
-                                            }
+                                            _renamedHeadParts.TryAdd(possibleDup.Key, headPartName);
                                             break;
                                         }
                                     }
@@ -400,7 +387,13 @@ namespace FaceGenChecker
                         }
                     );
                 }
-                // alter for any missed meshes
+                // output all updated HeadParts
+                foreach(var renamed in _renamedHeadParts)
+                {
+                    _state.PatchMod.HeadParts.GetOrAddAsOverride(renamed.Key).EditorID = renamed.Value;
+                }
+
+                // notify about missing meshes
                 foreach (var required in bsaFiles)
                 {
                     if (!bsaDone.ContainsKey(required.Key))
