@@ -295,7 +295,11 @@ namespace FaceGenChecker
                 if (mismatches > 0)
                 {
                     _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
-                    _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                    // this operation is not thread-safe
+                    lock(this)
+                    {
+                        _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                    }
                 }
                 else
                 {
