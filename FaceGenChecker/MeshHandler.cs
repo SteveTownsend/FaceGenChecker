@@ -1,11 +1,16 @@
-﻿using Mutagen.Bethesda;
+﻿using IniParser;
+using IniParser.Model.Configuration;
+using IniParser.Parser;
+using Mutagen.Bethesda;
 using Mutagen.Bethesda.Archives;
+using Mutagen.Bethesda.Inis;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Cache.Internals.Implementations;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using nifly;
 using Noggog;
+using Noggog.Utility;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -341,9 +346,9 @@ namespace FaceGenChecker
             IDictionary<string, string> bsaDone = new ConcurrentDictionary<string, string>();
             if (bsaFiles.Count > 0)
             {
-                var archivePaths = Archive.GetApplicableArchivePaths(_state.GameRelease, _settings.paths.ConflictWinnerLocation);
+                // var archivePaths = Archive.GetApplicableArchivePaths(_state.GameRelease, _settings.paths.ConflictWinnerLocation);
+                var archivePaths = GetPriorityArchivePaths(_state.GameRelease);
 
-                // debug
                 if (archivePaths.Count() > 0)
                 {
                     _settings.diagnostics.logger.WriteLine("Processing {0} BSA files:", archivePaths.Count());
@@ -351,7 +356,8 @@ namespace FaceGenChecker
                     archivePaths.ForEach(x => _settings.diagnostics.logger.WriteLine("  {0}", x));
                 }
                 // Introspect all known BSAs to locate meshes not found as loose files. Dups are ignored - first find wins, so we scan from the end of the list
-                foreach (var bsaFile in archivePaths.Reverse())
+                //foreach (var bsaFile in archivePaths.Reverse())
+                foreach (var bsaFile in archivePaths)
                 {
                     var bsaReader = Archive.CreateReader(_state.GameRelease, bsaFile);
                     bsaReader.Files.AsParallel().
@@ -414,6 +420,132 @@ namespace FaceGenChecker
             {
                 DoNPC(npc);
             }
+        }
+        /* engine reverts to defaults if it can't read files (the archaic GetPrivateProfile api is used), we might as well 
+         * throw and force the user to sort out their stuff */
+        internal static string? ReadIniValue(FileIniDataParser a_parser, FilePath a_path, string a_section, string a_key)
+        {
+            var data = a_parser.ReadData(new StreamReader(IFileSystemExt.DefaultFilesystem.File.OpenRead(a_path)));
+
+            var section = data[a_section];
+            if (section != null)
+            {
+                return section[a_key];
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        // get a value from the winning mod ini override or Skyrim.ini if none exist
+        internal string? GetWinningIniValue(GameRelease a_gameRelease, string a_section, string a_key)
+        {
+            IniParserConfiguration parserConfig = new()
+            {
+                AllowDuplicateKeys = true,
+                AllowDuplicateSections = true,
+                AllowKeysWithoutSection = true,
+                AllowCreateSectionsOnFly = true,
+                CaseInsensitive = true,
+                SkipInvalidLines = true,
+            };
+            var parser = new FileIniDataParser(new IniDataParser(parserConfig));
+
+            foreach (var e in _state.LoadOrder.PriorityOrder)
+            {
+                if (!e.Enabled)
+                {
+                    continue;
+                }
+
+                FilePath path = Path.Combine(_state.DataFolderPath, e.ModKey.Name + ".ini");
+
+                if (!path.CheckExists())
+                {
+                    continue;
+                }
+
+                var value = ReadIniValue(parser, path, a_section, a_key);
+                if (value != null)
+                {
+                    return value;
+                }
+            }
+
+            FilePath basePath = Ini.GetTypicalPath(a_gameRelease);
+
+            return ReadIniValue(parser, basePath, a_section, a_key);
+        }
+
+        public enum ResourceArchiveList
+        {
+            Primary,
+            Secondary
+        };
+
+        // retrieve a list, parse comma-delimited filenames, prune zero-length strings and non-existent paths and return as FilePath list
+        internal List<FilePath>? GetResourceArchiveList(GameRelease a_gameRelease, ResourceArchiveList a_list)
+        {
+            string key = a_list == ResourceArchiveList.Secondary ?
+                "sResourceArchiveList2" :
+                "sResourceArchiveList";
+
+            return
+                GetWinningIniValue(a_gameRelease, "Archive", key)?
+                .Split(",", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => new FilePath(Path.Combine(_settings.paths.ConflictWinnerLocation, x)))
+                .Where(x => x.CheckExists())
+                .ToList();
+        }
+
+        internal List<FilePath> GetBaseArchivePaths(GameRelease a_gameRelease)
+        {
+            var l1 = GetResourceArchiveList(a_gameRelease, ResourceArchiveList.Primary);
+            var l2 = GetResourceArchiveList(a_gameRelease, ResourceArchiveList.Secondary);
+
+            return l1.EmptyIfNull().And(l2.EmptyIfNull()).ToList();
+        }
+
+        internal List<FilePath> GetPossibleModArchives(GameRelease a_gameRelease, ModKey a_modKey)
+        {
+            var ext = Archive.GetExtension(a_gameRelease);
+
+            return new()
+            {
+                Path.Combine(_settings.paths.ConflictWinnerLocation, a_modKey.Name + ext),
+                Path.Combine(_settings.paths.ConflictWinnerLocation, a_modKey.Name + " - Textures" + ext),
+                Path.Combine(_settings.paths.ConflictWinnerLocation, a_modKey.Name + " - 0" + ext),
+                Path.Combine(_settings.paths.ConflictWinnerLocation, a_modKey.Name + " - 1" + ext)
+            };
+        }
+
+        // get archive path list according to load order
+        internal List<FilePath> GetOrderedArchivePaths(GameRelease a_gameRelease)
+        {
+            var result = GetBaseArchivePaths(a_gameRelease);
+
+            _state.LoadOrder.ListedOrder.ForEach(x =>
+            {
+                if (x.Enabled)
+                {
+                    result.AddRange(
+                        GetPossibleModArchives(a_gameRelease, x.ModKey)
+                        .Where(y => y.CheckExists() && !result.Contains(y)));
+                }
+            });
+
+            return result;
+        }
+
+        // get priority archive path list 
+        internal List<FilePath> GetPriorityArchivePaths(GameRelease a_gameRelease)
+        {
+            var result = GetOrderedArchivePaths(a_gameRelease);
+
+            result.Reverse();
+
+            return result;
         }
     }
 }
