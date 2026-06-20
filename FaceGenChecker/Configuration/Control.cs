@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace FaceGenChecker.Settings
+namespace FaceGenChecker.Configuration
 {
     public class Control
     {

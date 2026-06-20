@@ -11,8 +11,8 @@ namespace FaceGenChecker
 {
     public class Program
     {
-        static Lazy<Settings.Settings> _settings = null!;
-        static internal Settings.Settings settings => _settings.Value;
+        static Lazy<FaceGenChecker.Settings> _settings = null!;
+        static internal FaceGenChecker.Settings settings => _settings.Value;
 
         private static IPatcherState<ISkyrimMod, ISkyrimModGetter>? _state;
         public static IPatcherState<ISkyrimMod, ISkyrimModGetter> PatcherState

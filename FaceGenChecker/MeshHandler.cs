@@ -18,7 +18,7 @@ namespace FaceGenChecker
 {
     public class MeshHandler
     {
-        internal Settings.Settings _settings { get; }
+        internal FaceGenChecker.Settings _settings { get; }
         internal IPatcherState<ISkyrimMod, ISkyrimModGetter> _state { get; }
         private ImmutableLoadOrderLinkUsageCache _references;
 
@@ -43,7 +43,7 @@ namespace FaceGenChecker
         internal int _countGenerated;
         private int _countFailed;
 
-        internal MeshHandler(Settings.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
+        internal MeshHandler(FaceGenChecker.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
             _settings = settings;
             _state = state;

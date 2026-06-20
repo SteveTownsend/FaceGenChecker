@@ -1,6 +1,6 @@
 ﻿using Mutagen.Bethesda.Synthesis.Settings;
 
-namespace FaceGenChecker.Settings
+namespace FaceGenChecker.Configuration
 {
     public class Paths
     {
