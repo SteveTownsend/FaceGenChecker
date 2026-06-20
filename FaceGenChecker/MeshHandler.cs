@@ -37,6 +37,7 @@ namespace FaceGenChecker
             HeadPart.TypeEnum.Hair
         };
         HashSet<FormKey> _checkedHeadPartDuplicates = new HashSet<FormKey>();
+        IDictionary<IHeadPartGetter, byte> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, byte>();
 
         private int _countSkipped;
         private int _countCandidates;
@@ -222,10 +223,13 @@ namespace FaceGenChecker
                                         using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
                                         if (originalHeadPart is not null)
                                         {
-                                            _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
-                                            HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
-                                            renamed.EditorID = originalName;
-											matched = true;
+                                            if (_renamedHeadParts.TryAdd(headPart, (byte)0))
+                                            {
+                                                _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
+                                                HeadPart renamed = _state.PatchMod.HeadParts.GetOrAddAsOverride(headPart);
+                                                renamed.EditorID = originalName;
+                                            }
+                                            matched = true;
                                         }
                                         else
                                         {
