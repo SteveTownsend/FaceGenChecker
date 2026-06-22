@@ -259,7 +259,6 @@ namespace FaceGenChecker
                     else
                     {
                         using var header = nif.GetHeader();
-                        using niflycpp.BlockCache blockCache = new niflycpp.BlockCache(header);
                         using var childNodes = rootNode.GetChildren().GetRefs();
                         foreach (var childNode in childNodes)
                         {
@@ -277,8 +276,9 @@ namespace FaceGenChecker
                                             _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF fuzzy matched {2}", npc, headPartName, possibleDup.Value);
                                             --mismatches;
                                             
-                                            tryMatchInNif.Remove(possibleDup.Key);
                                             _renamedHeadParts.TryAdd(possibleDup.Key, headPartName);
+                                            // only remove after all usage
+                                            tryMatchInNif.Remove(possibleDup.Key);
                                             break;
                                         }
                                     }
