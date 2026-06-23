@@ -113,7 +113,7 @@ namespace FaceGenChecker
                 if (usageByNpc.TryResolveSimpleContext(_state.LinkCache, out var winningUser) &&
                     winningUser.Record.Configuration.TemplateFlags.HasFlag(NpcConfiguration.TemplateFlag.Traits))
                 {
-                    _settings.diagnostics.logger.WriteLine("Keep {0} - template traits used in {1}", npc, winningUser);
+                    _settings.diagnostics.logger.WriteLine("Keep {0} - template traits used in {1}", npc, winningUser.ModKey);
                     return true;
                 }
             }
@@ -393,7 +393,7 @@ namespace FaceGenChecker
                             }
                             catch (Exception e)
                             {
-                                _settings.diagnostics.logger.WriteLine("Exception on {0} {1} from BSA {2}: {3}", npc, bsaMesh.Path, bsaFile, e.GetBaseException());
+                                _settings.diagnostics.logger.WriteLine("Exception on {0} from BSA {1}: {2}", bsaMesh.Path, bsaFile, e.GetBaseException());
                             }
                         }
                     );
