@@ -132,7 +132,9 @@ namespace FaceGenChecker
 
         private bool DoNPC(INpcGetter npc)
         {
-            if (npc.ToLink<INpcGetter>().TryResolveSimpleContext(_state.LinkCache, out var context))
+            var contexts = _state.LinkCache.ResolveAllContexts<INpc, INpcGetter>(npc.FormKey).ToList();
+            var context = contexts.Count > 0 ? contexts[0] : null;
+            if (context is not null)
             {
 	            if (!IsIncluded(npc))
                 {
