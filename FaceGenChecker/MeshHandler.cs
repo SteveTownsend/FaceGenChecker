@@ -360,24 +360,25 @@ namespace FaceGenChecker
                     archivePaths.ForEach(x => _settings.diagnostics.logger.WriteLine("  {0}", x));
                 }
                 // Introspect all known BSAs to locate meshes not found as loose files. Dups are ignored - first find wins, so we scan from the end of the list
-                //foreach (var bsaFile in archivePaths.Reverse())
                 foreach (var bsaFile in archivePaths)
                 {
                     var bsaReader = Archive.CreateReader(_state.GameRelease, bsaFile);
                     bsaReader.Files.AsParallel().
                         Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())).
                         ForAll(bsaMesh =>
-                        //foreach (var bsaMesh in bsaReader.Files.Where(candidate => bsaFiles.ContainsKey(candidate.Path.ToLower())))
                         {
                             try
                             {
                                 var npc = bsaFiles.GetOrDefault(bsaMesh.Path.ToLower());
-                                //                                string rawPath = bsaFiles[bsaMesh.Path.ToLower()];
-                                //                                TargetMeshInfo meshInfo = targetMeshes[rawPath];
+                                if (npc is null)
+                                {
+                                    _settings.diagnostics.logger.WriteLine("{0} does not match any NPC", bsaMesh.Path);
+                                    return;
+                                }
 
                                 if (!bsaDone.TryAdd(bsaMesh.Path, bsaFile.Path))
                                 {
-                                    _settings.diagnostics.logger.WriteLine("{0} from BSA {1} already processed from BSA {2}", bsaMesh.Path, bsaFile.Path, bsaDone[bsaMesh.Path]);
+                                    _settings.diagnostics.logger.WriteLine("{0} {1} from BSA {2} already processed from BSA {3}", npc, bsaMesh.Path, bsaFile.Path, bsaDone[bsaMesh.Path]);
                                     return;
                                 }
 
@@ -386,13 +387,13 @@ namespace FaceGenChecker
                                 using vectoruchar bsaBytes = new vectoruchar(bsaData);
                                 using var nif = new NifFile(bsaBytes);
 
-                                _settings.diagnostics.logger.WriteLine("Process {0} from BSA {1}", bsaMesh.Path, bsaFile);
+                                _settings.diagnostics.logger.WriteLine("{0} uses {1} from BSA {2}", npc, bsaMesh.Path, bsaFile);
                                 string newFile = _settings.paths.OutputFolder + bsaMesh.Path;
                                 DoMesh(nif, bsaMesh.Path, newFile, npc);
                             }
                             catch (Exception e)
                             {
-                                _settings.diagnostics.logger.WriteLine("Exception on {0} from BSA {1}: {2}", bsaMesh.Path, bsaFile, e.GetBaseException());
+                                _settings.diagnostics.logger.WriteLine("Exception on {0} {1} from BSA {2}: {3}", npc, bsaMesh.Path, bsaFile, e.GetBaseException());
                             }
                         }
                     );
