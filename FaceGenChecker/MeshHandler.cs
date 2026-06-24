@@ -44,8 +44,8 @@ namespace FaceGenChecker
         IDictionary<IHeadPartGetter, string> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, string>();
 
         private int _countSkipped;
-        private int _countCandidates;
-        internal int _countGenerated;
+        private int _countTotal;
+        internal int _countMatched;
         private int _countFailed;
 
         internal MeshHandler(FaceGenChecker.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
@@ -130,7 +130,7 @@ namespace FaceGenChecker
             return true;
         }
 
-        private bool DoNPC(INpcGetter npc)
+        private bool AnalyzeNPC(INpcGetter npc)
         {
             var contexts = _state.LinkCache.ResolveAllContexts<INpc, INpcGetter>(npc.FormKey).ToList();
             var context = contexts.Count > 0 ? contexts[0] : null;
@@ -296,22 +296,31 @@ namespace FaceGenChecker
                 // all plugin headparts must be present in the NIF
                 if (mismatches > 0)
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} forwarded, headparts mismatched", npc);
+                    _settings.diagnostics.logger.WriteLine("MISMATCH - {0} forwarded for checking", npc);
                     // this operation is not thread-safe
                     lock(this)
                     {
                         _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                        ++_countFailed;
                     }
                 }
                 else
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} headpart match, should be OK in game", npc);
+                    _settings.diagnostics.logger.WriteLine("MATCHED - {0} should be OK in game", npc);
+                    lock (this)
+                    {
+                        ++_countMatched;
+                    }
                 }
             }
             catch (Exception e)
             {
                 Interlocked.Increment(ref _countFailed);
                 _settings.diagnostics.logger.WriteLine("Exception processing {0}: {1}", originalPath, e.GetBaseException());
+                lock (this)
+                {
+                    ++_countFailed;
+                }
             }
         }
         internal void ProcessMeshes()
@@ -416,8 +425,8 @@ namespace FaceGenChecker
                 }
             }
 
-            _settings.diagnostics.logger.WriteLine("Generated {0}, Candidates {1}, Skipped {2}, Failed {3}",
-                _countGenerated, _countCandidates, _countSkipped, _countFailed);
+            _settings.diagnostics.logger.WriteLine("Total NPCs: {0}, Matched {1}, Skipped {2}, Failed {3}",
+                _countTotal, _countMatched, _countSkipped, _countFailed);
         }
 
         internal void Analyze()
@@ -425,7 +434,11 @@ namespace FaceGenChecker
             // inventory the meshes to be transformed
             foreach (var npc in Program.PatcherState.LoadOrder.PriorityOrder.WinningOverrides<INpcGetter>())
             {
-                DoNPC(npc);
+                if (AnalyzeNPC(npc))
+                {
+                    ++_countSkipped;
+                }
+                ++_countTotal;
             }
         }
         /* engine reverts to defaults if it can't read files (the archaic GetPrivateProfile api is used), we might as well 
