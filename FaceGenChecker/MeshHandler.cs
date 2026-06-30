@@ -42,11 +42,13 @@ namespace FaceGenChecker
             HeadPart.TypeEnum.Hair
         };
         IDictionary<IHeadPartGetter, string> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, string>();
+        IKeywordGetter? _rsvIgnore;
 
         private int _countSkipped;
         private int _countTotal;
         internal int _countMatched;
         private int _countFailed;
+        private int _countNoMesh;
 
         internal MeshHandler(FaceGenChecker.Settings settings, IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
@@ -176,6 +178,14 @@ namespace FaceGenChecker
                 }
                 _headPartsByNpc.Add(npc.FormKey, headParts);
                 _npcs.Add(npc);
+
+                // if this is ineligible for RSV, add the keyword
+                if (_settings.control.RSVIgnoreCustomSkin && _rsvIgnore is not null && npc.WornArmor is not null)
+                {
+                    var updater = _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                    updater.Keywords.Add(_rsvIgnore);
+                    _settings.diagnostics.logger.WriteLine("  RSVIgnore added to {0}, skin is {1]", npc, npc.WornArmor);
+                }
                 return true;
             }
             else
@@ -278,7 +288,7 @@ namespace FaceGenChecker
                                             _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF fuzzy matched {2}", npc, headPartName, possibleDup.Value);
                                             --mismatches;
                                             
-                                            _renamedHeadParts.TryAdd(possibleDup.Key, headPartName);
+                                            _renamedHeadParts.TryAdd(possibleDup.Key, possibleDup.Value);
                                             // only remove after all usage
                                             tryMatchInNif.Remove(possibleDup.Key);
                                             break;
@@ -421,20 +431,34 @@ namespace FaceGenChecker
                     if (!bsaDone.ContainsKey(required.Key))
                     {
                         _settings.diagnostics.logger.WriteLine(" No NIF found for NPC {0}", required.Value.FormKey);
+                        ++_countNoMesh;
                     }
                 }
             }
 
-            _settings.diagnostics.logger.WriteLine("Total NPCs: {0}, Matched {1}, Skipped {2}, Failed {3}",
-                _countTotal, _countMatched, _countSkipped, _countFailed);
+            _settings.diagnostics.logger.WriteLine("Total NPCs: {0}, Matched {1}, Skipped {2}, Failed {3}, No NIF {4}",
+                _countTotal, _countMatched, _countSkipped, _countFailed, _countNoMesh);
         }
 
         internal void Analyze()
         {
+            // check if RSV 'ignore NPC' KYWD is present
+            if (_settings.control.RSVIgnoreCustomSkin)
+            {
+                var rsvIgnore = new FormKey("Racial Skin Variance - SPID.esp", 0xA0B);
+                if (_state.LinkCache.TryResolve<IKeywordGetter>(rsvIgnore, out var keyword))
+                {
+                    _rsvIgnore = keyword;
+                }
+                else
+                {
+                    _settings.diagnostics.logger.WriteLine("RSVIgnoreCustomSkin: cannot resolve {0} to Keyword record", rsvIgnore);
+                }
+            }
             // inventory the meshes to be transformed
             foreach (var npc in Program.PatcherState.LoadOrder.PriorityOrder.WinningOverrides<INpcGetter>())
             {
-                if (AnalyzeNPC(npc))
+                if (!AnalyzeNPC(npc))
                 {
                     ++_countSkipped;
                 }
