@@ -189,7 +189,7 @@ namespace FaceGenChecker
                         updater.Keywords = new ExtendedList<IFormLinkGetter<IKeywordGetter>>();
                     }
                     updater.Keywords.Add(_rsvIgnore);
-                    _settings.diagnostics.logger.WriteLine("  RSVIgnore added to {0}, skin is {1]", npc, npc.WornArmor);
+                    _settings.diagnostics.logger.WriteLine("  RSVIgnore added to {0}, skin is {1]", npc, npc.WornArmor.FormKey);
                 }
                 return true;
             }
