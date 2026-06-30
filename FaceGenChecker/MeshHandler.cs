@@ -183,6 +183,11 @@ namespace FaceGenChecker
                 if (_settings.control.RSVIgnoreCustomSkin && _rsvIgnore is not null && npc.WornArmor is not null)
                 {
                     var updater = _state.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                    // in case this is the first KYWD
+                    if (updater.Keywords is null)
+                    {
+                        updater.Keywords = new ExtendedList<IFormLinkGetter<IKeywordGetter>>();
+                    }
                     updater.Keywords.Add(_rsvIgnore);
                     _settings.diagnostics.logger.WriteLine("  RSVIgnore added to {0}, skin is {1]", npc, npc.WornArmor);
                 }
