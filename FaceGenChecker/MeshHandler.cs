@@ -32,7 +32,7 @@ namespace FaceGenChecker
         public static readonly string _FaceGenRootNode = "BSFaceGenNiNodeSkinned";
         public static readonly string _DuplicateTag = "DUPLICATE";
 
-        private IDictionary<INpcGetter, ICollection<IHeadPartGetter>> _npcs = new Dictionary<INpcGetter, ICollection<IHeadPartGetter>>();
+        private IDictionary<INpcGetter, ICollection<IHeadPartGetter>> _npcPluginHeadParts = new Dictionary<INpcGetter, ICollection<IHeadPartGetter>>();
         private HashSet<HeadPart.TypeEnum> _raceHeadParts = new HashSet<HeadPart.TypeEnum>
         {
             HeadPart.TypeEnum.Eyebrows,
@@ -192,7 +192,7 @@ namespace FaceGenChecker
                         }
                     }
                 }
-                _npcs.Add(npc, headParts);
+                _npcPluginHeadParts.Add(npc, headParts);
 
                 // if this is ineligible for RSV, add the keyword
                 if (_settings.control.RSVIgnoreCustomSkin && _rsvIgnore is not null && !npc.WornArmor.FormKey.IsNull)
@@ -216,7 +216,7 @@ namespace FaceGenChecker
         }
 
 
-        public void DoMesh(NifFile nif, string originalPath, string newPath, INpcGetter npc)
+        public void DoMesh(NifFile nif, string originalPath, string newPath, INpcGetter npc, ICollection<IHeadPartGetter> headParts)
         {
             try
             {
@@ -237,7 +237,6 @@ namespace FaceGenChecker
 
                 // match head parts with the winning NPC record's list
                 _settings.diagnostics.logger.WriteLine("Check HeadParts in NIF {0} vs {1}", originalPath, npc);
-                var headParts = _npcs[npc];
                 UInt32 mismatches = 0;
                 IDictionary<IHeadPartGetter, string> tryMatchInNif = new Dictionary<IHeadPartGetter, string>();
                 foreach (var headPart in headParts)
@@ -364,35 +363,34 @@ namespace FaceGenChecker
         internal void ProcessMeshes()
         {
             // no op if empty
-            if (_npcs.Count == 0)
+            int totalNPCs = _npcPluginHeadParts.Count;
+            if (totalNPCs == 0)
             {
                 _settings.diagnostics.logger.WriteLine("No NPCs found");
                 return;
             }
             IDictionary<string, INpcGetter> bsaFiles = new ConcurrentDictionary<string, INpcGetter>();
-            int totalNPCs = _npcs.Count;
-
             IDictionary<INpcGetter, byte> looseDone = new ConcurrentDictionary<INpcGetter, byte>();
-            Parallel.ForEach(_npcs, npc =>
+            Parallel.ForEach(_npcPluginHeadParts, npcWithHeadParts =>
             {
                 // loose file wins over BSA contents
-                string relativePath = String.Format("{0}{1}\\{2:X8}.nif", _MeshPrefix, npc.Key.FormKey.ModKey.FileName, npc.Key.FormKey.ID);
+                string relativePath = String.Format("{0}{1}\\{2:X8}.nif", _MeshPrefix, npcWithHeadParts.Key.FormKey.ModKey.FileName, npcWithHeadParts.Key.FormKey.ID);
                 string fullPath = String.Format("{0}/{1}", _settings.paths.ConflictWinnerLocation, relativePath);
-                string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, _MeshPrefix, npc.Key.FormKey.ModKey.FileName, npc.Key.FormKey.ID);
+                string newFile = String.Format("{0}\\{1}{2}\\{3:X8}.nif", _settings.paths.OutputFolder, _MeshPrefix, npcWithHeadParts.Key.FormKey.ModKey.FileName, npcWithHeadParts.Key.FormKey.ID);
                 if (File.Exists(fullPath))
                 {
-                    _settings.diagnostics.logger.WriteLine("Found mesh for {0} in loose file {1}", npc, fullPath);
+                    _settings.diagnostics.logger.WriteLine("Found mesh for {0} in loose file {1}", npcWithHeadParts.Key, fullPath);
 
                     using NifFile nif = new NifFile();
                     nif.Load(fullPath);
-                    DoMesh(nif, relativePath, newFile, npc.Key);
-                    looseDone.Add(npc.Key, 1);
+                    DoMesh(nif, relativePath, newFile, npcWithHeadParts.Key, npcWithHeadParts.Value);
+                    looseDone.Add(npcWithHeadParts.Key, 1);
                 }
                 else
                 {
                     // check for this file in archives
-                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0} with mesh file {1}", npc, relativePath);
-                    bsaFiles.Add(relativePath.ToLower(), npc.Key);
+                    _settings.diagnostics.logger.WriteLine("Search BSAs for NPC {0} with mesh file {1}", npcWithHeadParts.Key, relativePath);
+                    bsaFiles.Add(relativePath.ToLower(), npcWithHeadParts.Key);
                 }
             });
 
@@ -424,10 +422,14 @@ namespace FaceGenChecker
                                     _settings.diagnostics.logger.WriteLine("{0} does not match any NPC", bsaMesh.Path);
                                     return;
                                 }
-
                                 if (!bsaDone.TryAdd(bsaMesh.Path, bsaFile.Path))
                                 {
                                     _settings.diagnostics.logger.WriteLine("{0} {1} from BSA {2} already processed from BSA {3}", npc, bsaMesh.Path, bsaFile.Path, bsaDone[bsaMesh.Path]);
+                                    return;
+                                }
+                                if (!_npcPluginHeadParts.TryGetValue(npc, out var headParts))
+                                {
+                                    _settings.diagnostics.logger.WriteLine("{0} {1} - plugin headparts not recorded", npc, bsaMesh.Path);
                                     return;
                                 }
 
@@ -438,7 +440,7 @@ namespace FaceGenChecker
 
                                 _settings.diagnostics.logger.WriteLine("{0} uses {1} from BSA {2}", npc, bsaMesh.Path, bsaFile);
                                 string newFile = _settings.paths.OutputFolder + bsaMesh.Path;
-                                DoMesh(nif, bsaMesh.Path, newFile, npc);
+                                DoMesh(nif, bsaMesh.Path, newFile, npc, headParts);
                             }
                             catch (Exception e)
                             {
