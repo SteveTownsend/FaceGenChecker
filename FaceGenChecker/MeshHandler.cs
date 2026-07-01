@@ -310,13 +310,13 @@ namespace FaceGenChecker
                             }
                         }
                     }
-                    // HDPTs without a model may be in the NIF but not the plugin, but must reference a valid record
+                    // HDPT that has no model or is Extra Part may be in the NIF but not the plugin, but must reference a valid record
                     foreach (var nifBlock in nifBlocks.ToList())
                     {
                         var headPart = _state.LinkCache.Resolve<IHeadPartGetter>(nifBlock);
-                        if (headPart is not null && headPart.Model is null)
+                        if (headPart is not null && (headPart.Model is null || headPart.Flags.HasFlag(HeadPart.Flag.IsExtraPart)))
                         {
-                            _settings.diagnostics.logger.WriteLine("{0} (no model) OK in NIF but not plugin", npc, headPart);
+                            _settings.diagnostics.logger.WriteLine("{0} {1} (no model) OK in NIF but not plugin", npc, headPart);
 							nifBlocks.Remove(nifBlock);
                         }
                     }
