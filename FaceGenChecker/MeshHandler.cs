@@ -327,7 +327,7 @@ namespace FaceGenChecker
                 }
                 if (nifBlocks.Count > 0)
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, nifBlocks);
+                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, String.Join(",",nifBlocks.ToArray()));
                 }
                 _settings.diagnostics.logger.WriteLine("MISMATCH - {0} forwarded for checking", npc);
                 // this operation is not thread-safe
