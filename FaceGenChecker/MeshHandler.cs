@@ -33,13 +33,6 @@ namespace FaceGenChecker
         public static readonly string _DuplicateTag = "DUPLICATE";
 
         private IDictionary<INpcGetter, ICollection<IHeadPartGetter>> _npcPluginHeadParts = new Dictionary<INpcGetter, ICollection<IHeadPartGetter>>();
-        private HashSet<HeadPart.TypeEnum> _raceHeadParts = new HashSet<HeadPart.TypeEnum>
-        {
-            HeadPart.TypeEnum.Eyebrows,
-            HeadPart.TypeEnum.Eyes,
-            HeadPart.TypeEnum.Face,
-            HeadPart.TypeEnum.Hair
-        };
         IDictionary<IHeadPartGetter, string> _renamedHeadParts = new ConcurrentDictionary<IHeadPartGetter, string>();
         IKeywordGetter? _rsvIgnore;
 
@@ -145,11 +138,11 @@ namespace FaceGenChecker
                 var headParts = new HashSet<IHeadPartGetter>();
                 // We must fill in any missing essential HDPTs from NPC's RACE
                 // HDPTs without a model need not be processed
-                var getFromRace = new HashSet<HeadPart.TypeEnum>(_raceHeadParts);
+                var foundInNpc = new HashSet<HeadPart.TypeEnum>();
                 foreach (var headPartLink in npc.HeadParts)
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
-                    _settings.diagnostics.logger.WriteLine("  {0}", headPart);
+                    _settings.diagnostics.logger.WriteLine("  {0} {1}", headPart, headPart.Type);
                     // skip HDPT with no model
                     if (headPart.Model is null)
                     {
@@ -158,35 +151,44 @@ namespace FaceGenChecker
                     else
                     {
                         headParts.Add(headPart);
-                        getFromRace.Remove((HeadPart.TypeEnum)headPart.Type);
+                        foundInNpc.Add((HeadPart.TypeEnum)headPart.Type);
+                        // record any nested 'extra' Head Parts
+                        foreach (var extraPart in headPart.ExtraParts)
+                        {
+                            var nestedHeadPart = extraPart.Resolve(_state.LinkCache);
+                            if (nestedHeadPart.Model is null)
+                            {
+                                _settings.diagnostics.logger.WriteLine("{0} {1} (extra) skipped, no Model", npc, nestedHeadPart);
+                            }
+                            else
+                            {
+                                _settings.diagnostics.logger.WriteLine("  {0} {1} extra", nestedHeadPart, nestedHeadPart.Type);
+                                headParts.Add(nestedHeadPart);
+                            }
+                        }
                     }
                 }
                 // fill in gaps from RACE record
-                if (getFromRace.Count > 0)
+                if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace) && npcRace.Record.HeadData is not null)
                 {
-                    if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace) && npcRace.Record.HeadData is not null)
+                    var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
+                        npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
+                    if (raceHeadData is not null)
                     {
-                        var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
-                            npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
-                        if (raceHeadData is not null)
+                        foreach (var headPartLink in raceHeadData.HeadParts)
                         {
-                            foreach (var headPartLink in raceHeadData.HeadParts)
+                            if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
                             {
-                                if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
+                                // skip HDPT with no model
+                                if (raceHeadPart.Record.Model is null)
                                 {
-                                    if (getFromRace.Remove((HeadPart.TypeEnum)raceHeadPart.Record.Type))
-                                    {
-                                        // skip HDPT with no model
-                                        if (raceHeadPart.Record.Model is null)
-                                        {
-                                            _settings.diagnostics.logger.WriteLine("{0} {1} {2} skipped, no Model", npc, npcRace.Record, raceHeadPart);
-                                        }
-                                        else
-                                        {
-                                            _settings.diagnostics.logger.WriteLine("  RACE {0}", raceHeadPart.Record);
-                                            headParts.Add(raceHeadPart.Record);
-                                        }
-                                    }
+                                    _settings.diagnostics.logger.WriteLine("  RACE {0} {1} skipped, no Model", npcRace.Record, raceHeadPart);
+                                }
+                                else if (!foundInNpc.Contains((HeadPart.TypeEnum)raceHeadPart.Record.Type))
+                                {
+                                    // Promote if Race HDPT type was not found in NPC
+                                    _settings.diagnostics.logger.WriteLine("  RACE {0} promoted", raceHeadPart.Record);
+                                    headParts.Add(raceHeadPart.Record);
                                 }
                             }
                         }
