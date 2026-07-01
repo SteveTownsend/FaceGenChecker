@@ -229,7 +229,7 @@ namespace FaceGenChecker
                 IDictionary<IHeadPartGetter, string> tryMatchInNif = new Dictionary<IHeadPartGetter, string>();
                 foreach (var headPart in headParts)
                 {
-                    if (nifBlocks.Remove(headPart.EditorID))
+                    if (!nifBlocks.Remove(headPart.EditorID))
                     {
                         bool matched = false;
                         if (_settings.control.FixMergedEditorID)
