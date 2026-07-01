@@ -209,7 +209,8 @@ namespace FaceGenChecker
                 }
                 using var header = nif.GetHeader();
                 using var childNodes = rootNode.GetChildren().GetRefs();
-                ISet<string> nifBlocks = new HashSet<string>();
+                IDictionary<string, int> nifBlocks = new Dictionary<string, int>();
+                // record NIF block names and index of DUPLICATE tag
                 foreach (var childNode in childNodes)
                 {
                     using (childNode)
@@ -218,7 +219,8 @@ namespace FaceGenChecker
                         if (nodeBlock != null)
                         {
                             using var blockName = nodeBlock.name;
-                            nifBlocks.Add(blockName.get());
+                            string blockNameStr = blockName.get();
+                            nifBlocks.Add(blockNameStr, blockNameStr.IndexOf(_DuplicateTag));
                         }
                     }
                 }
@@ -256,16 +258,25 @@ namespace FaceGenChecker
                                         matched = true;
                                         _renamedHeadParts.TryAdd(headPart, originalName);
                                     }
-                                    // fuzzy match on NIF blocks that starts with the canonical name
+                                    // fuzzy match on NIF blocks that starts with the canonical name but is not itself DUPLICATE tagged
                                     else
                                     {
-                                        var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.StartsWith(originalName)).ToList();
+                                        var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.Value == -1 && nifBlock.Key.Equals(originalName)).ToList();
                                         foreach (var nifBlock in fuzzyMatched)
                                         {
-                                            _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, originalName, nifBlock);
+                                            _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, headPart, nifBlock);
                                             matched = true;
                                             _renamedHeadParts.TryAdd(headPart, originalName);
-                                            nifBlocks.Remove(nifBlock);
+                                            nifBlocks.Remove(nifBlock.Key);
+                                        }
+                                        // If NIF was already a DUPLICATE with the same initial substring, we revert the HDPT to the NIF value
+                                        var matchedToTag = nifBlocks.Where(nifBlock => nifBlock.Value == originalName.Length).ToList();
+                                        foreach (var nifBlock in matchedToTag)
+                                        {
+                                            _settings.diagnostics.logger.WriteLine("{0} {1} use DUPLICATE {2} in NIF", npc, headPart, nifBlock.Key);
+                                            matched = true;
+                                            _renamedHeadParts.TryAdd(headPart, nifBlock.Key);
+                                            nifBlocks.Remove(nifBlock.Key);
                                         }
                                     }
                                 }
@@ -279,7 +290,7 @@ namespace FaceGenChecker
                     }
                     else
                     {
-                        _settings.diagnostics.logger.WriteLine("{0} {1} has match in NIF", npc, headPart);
+                        _settings.diagnostics.logger.WriteLine("{0} {1} exact match in NIF", npc, headPart);
                     }
                 }
                 if (nifBlocks.Count > 0)
@@ -313,11 +324,11 @@ namespace FaceGenChecker
                     // HDPT that has no model or is Extra Part may be in the NIF but not the plugin, but must reference a valid record
                     foreach (var nifBlock in nifBlocks.ToList())
                     {
-                        var headPart = _state.LinkCache.Resolve<IHeadPartGetter>(nifBlock);
+                        var headPart = _state.LinkCache.Resolve<IHeadPartGetter>(nifBlock.Key);
                         if (headPart is not null && (headPart.Model is null || headPart.Flags.HasFlag(HeadPart.Flag.IsExtraPart)))
                         {
                             _settings.diagnostics.logger.WriteLine("{0} {1} (no model) OK in NIF but not plugin", npc, headPart);
-							nifBlocks.Remove(nifBlock);
+							nifBlocks.Remove(nifBlock.Key);
                         }
                     }
                 }
