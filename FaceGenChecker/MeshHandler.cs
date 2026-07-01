@@ -143,7 +143,8 @@ namespace FaceGenChecker
                 {
                     var headPart = headPartLink.Resolve(_state.LinkCache);
                     _settings.diagnostics.logger.WriteLine("  {0} {1}", headPart, headPart.Type);
-                    // skip HDPT with no model
+                    // skip HDPT with no model - record of Type is still required
+                    foundInNpc.Add((HeadPart.TypeEnum)headPart.Type);
                     if (headPart.Model is null)
                     {
                         _settings.diagnostics.logger.WriteLine("{0} {1} skipped, no Model", npc, headPart);
@@ -151,7 +152,6 @@ namespace FaceGenChecker
                     else
                     {
                         headParts.Add(headPart);
-                        foundInNpc.Add((HeadPart.TypeEnum)headPart.Type);
                         // record any nested 'extra' Head Parts
                         foreach (var extraPart in headPart.ExtraParts)
                         {
