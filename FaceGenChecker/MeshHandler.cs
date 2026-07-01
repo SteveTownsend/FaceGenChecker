@@ -147,7 +147,7 @@ namespace FaceGenChecker
                     foundInNpc.Add((HeadPart.TypeEnum)headPart.Type);
                     if (headPart.Model is null)
                     {
-                        _settings.diagnostics.logger.WriteLine("{0} {1} skipped, no Model", npc, headPart);
+                        _settings.diagnostics.logger.WriteLine("  {0} skipped, no Model", headPart);
                     }
                     else
                     {
@@ -158,38 +158,12 @@ namespace FaceGenChecker
                             var nestedHeadPart = extraPart.Resolve(_state.LinkCache);
                             if (nestedHeadPart.Model is null)
                             {
-                                _settings.diagnostics.logger.WriteLine("{0} {1} (extra) skipped, no Model", npc, nestedHeadPart);
+                                _settings.diagnostics.logger.WriteLine("  {0} (extra) skipped, no Model", nestedHeadPart);
                             }
                             else
                             {
                                 _settings.diagnostics.logger.WriteLine("  {0} {1} extra", nestedHeadPart, nestedHeadPart.Type);
                                 headParts.Add(nestedHeadPart);
-                            }
-                        }
-                    }
-                }
-                // fill in gaps from RACE record
-                if (npc.Race.TryResolveSimpleContext(_state.LinkCache, out var npcRace) && npcRace.Record.HeadData is not null)
-                {
-                    var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
-                        npcRace.Record.HeadData.Female : npcRace.Record.HeadData.Male;
-                    if (raceHeadData is not null)
-                    {
-                        foreach (var headPartLink in raceHeadData.HeadParts)
-                        {
-                            if (headPartLink.Head.TryResolveSimpleContext(_state.LinkCache, out var raceHeadPart))
-                            {
-                                // skip HDPT with no model
-                                if (raceHeadPart.Record.Model is null)
-                                {
-                                    _settings.diagnostics.logger.WriteLine("  RACE {0} {1} skipped, no Model", npcRace.Record, raceHeadPart);
-                                }
-                                else if (!foundInNpc.Contains((HeadPart.TypeEnum)raceHeadPart.Record.Type))
-                                {
-                                    // Promote if Race HDPT type was not found in NPC
-                                    _settings.diagnostics.logger.WriteLine("  RACE {0} promoted", raceHeadPart.Record);
-                                    headParts.Add(raceHeadPart.Record);
-                                }
                             }
                         }
                     }
@@ -235,7 +209,19 @@ namespace FaceGenChecker
                 }
                 using var header = nif.GetHeader();
                 using var childNodes = rootNode.GetChildren().GetRefs();
-                uint nifHeadPartsToMatch = rootNode.GetChildren().GetSize();
+                ISet<string> nifBlocks = new HashSet<string>();
+                foreach (var childNode in childNodes)
+                {
+                    using (childNode)
+                    {
+                        using NiAVObject nodeBlock = header.GetBlockById(childNode.index) as NiAVObject;
+                        if (nodeBlock != null)
+                        {
+                            using var blockName = nodeBlock.name;
+                            nifBlocks.Add(blockName.get());
+                        }
+                    }
+                }
 
                 // match head parts with the winning NPC record's list
                 _settings.diagnostics.logger.WriteLine("Check HeadParts in NIF {0} vs {1}", originalPath, npc);
@@ -243,8 +229,7 @@ namespace FaceGenChecker
                 IDictionary<IHeadPartGetter, string> tryMatchInNif = new Dictionary<IHeadPartGetter, string>();
                 foreach (var headPart in headParts)
                 {
-                    using var headPartNode = nif.FindBlockByNameNiAVObject(headPart.EditorID);
-                    if (headPartNode is null)
+                    if (nifBlocks.Remove(headPart.EditorID))
                     {
                         bool matched = false;
                         if (_settings.control.FixMergedEditorID)
@@ -265,17 +250,23 @@ namespace FaceGenChecker
                                     // Heuristics:
                                     // - if original EditorID ended in a number it looks like the number gets nuked, so allow fuzzy compare
                                     // - if original EditorID did not end in a number, merged ID up to 'DUPLICATE' should match exactly and we use it
-                                    using var originalHeadPart = nif.FindBlockByNameNiAVObject(originalName);
-                                    if (originalHeadPart is not null)
+                                    if (nifBlocks.Remove(originalName))
                                     {
                                         _settings.diagnostics.logger.WriteLine("{0} {1} EditorID was {2}, now {3}", npc, headPart, headPart.EditorID, originalName);
                                         matched = true;
-                                        --nifHeadPartsToMatch;
                                         _renamedHeadParts.TryAdd(headPart, originalName);
                                     }
+                                    // fuzzy match on NIF blocks that starts with the canonical name
                                     else
                                     {
-                                        tryMatchInNif.Add(headPart, originalName);
+                                        var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.StartsWith(originalName)).ToList();
+                                        foreach (var nifBlock in fuzzyMatched)
+                                        {
+                                            _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, originalName, nifBlock);
+                                            matched = true;
+                                            _renamedHeadParts.TryAdd(headPart, originalName);
+                                            nifBlocks.Remove(nifBlock);
+                                        }
                                     }
                                 }
                             }
@@ -288,46 +279,40 @@ namespace FaceGenChecker
                     }
                     else
                     {
-                        --nifHeadPartsToMatch;
                         _settings.diagnostics.logger.WriteLine("{0} {1} has match in NIF", npc, headPart);
                     }
                 }
-                // Check Editor ID fuzzy match vs NIF for merged HDPTs that are 'missing'
-                if (tryMatchInNif.Count > 0)
+                if (nifBlocks.Count > 0)
                 {
-                    foreach (var childNode in childNodes)
+                    // Brute-force reconcile vs the NIF vs NPC_'s RACE/gender headparts
+                    if (npc.Race.TryResolve(_state.LinkCache, out var npcRace) && npcRace.HeadData is not null)
                     {
-                        using (childNode)
+                        var raceHeadData = npc.Configuration.Flags.HasFlag(NpcConfiguration.Flag.Female) ?
+                            npcRace.HeadData.Female : npcRace.HeadData.Male;
+                        if (raceHeadData is not null)
                         {
-                            using NiAVObject nodeBlock = header.GetBlockById(childNode.index) as NiAVObject;
-                            if (nodeBlock != null)
+                            foreach (var headPartLink in raceHeadData.HeadParts)
                             {
-                                using var blockName = nodeBlock.name;
-                                var headPartName = blockName.get();
-                                foreach (var possibleDup in tryMatchInNif)
+                                if (headPartLink.Head.TryResolve(_state.LinkCache, out var raceHeadPart))
                                 {
-                                    if (headPartName.StartsWith(possibleDup.Value))
+                                    // skip HDPT with no model
+                                    if (raceHeadPart.Model is null)
                                     {
-                                        _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} in NIF fuzzy matched {2}", npc, headPartName, possibleDup.Value);
-                                        --mismatches;
-                                            
-                                        _renamedHeadParts.TryAdd(possibleDup.Key, possibleDup.Value);
-                                        --nifHeadPartsToMatch;
-                                        // only remove after all usage
-                                        tryMatchInNif.Remove(possibleDup.Key);
-                                        break;
+                                        _settings.diagnostics.logger.WriteLine("{0} RACE {1} {2} skipped, no Model", npc, npcRace, raceHeadPart);
+                                    }
+                                    // Promote if Race HDPT type was not found in NPC 0 this is not foolproof, e.g. RACE Mouth may be hidden by NPC_ Hairline
+                                    else if (nifBlocks.Remove(raceHeadPart.EditorID))
+                                    {
+                                        _settings.diagnostics.logger.WriteLine("{0} RACE {1} promoted into NIF", npc, raceHeadPart);
+                                        headParts.Add(raceHeadPart);
                                     }
                                 }
                             }
                         }
                     }
                 }
-                foreach (var fuzzyMatcher in tryMatchInNif)
-                {
-                    _settings.diagnostics.logger.WriteLine("{0} HeadPart {1} no fuzzy match on {2} in NIF", npc, fuzzyMatcher.Key, fuzzyMatcher.Value);
-                }
                 // all plugin headparts must be present in the NIF and all NIF headparts must match the plugin NPC/RACE
-                if (mismatches == 0 && nifHeadPartsToMatch == 0)
+                if (mismatches == 0 && nifBlocks.Count == 0)
                 {
                     _settings.diagnostics.logger.WriteLine("MATCHED - {0} should be OK in game", npc);
                     lock (this)
@@ -340,9 +325,9 @@ namespace FaceGenChecker
                 {
                     _settings.diagnostics.logger.WriteLine("{0} has {1} plugin headparts unmatched in NIF", npc, mismatches);
                 }
-                if (nifHeadPartsToMatch > 0)
+                if (nifBlocks.Count > 0)
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, nifHeadPartsToMatch);
+                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, nifBlocks);
                 }
                 _settings.diagnostics.logger.WriteLine("MISMATCH - {0} forwarded for checking", npc);
                 // this operation is not thread-safe
