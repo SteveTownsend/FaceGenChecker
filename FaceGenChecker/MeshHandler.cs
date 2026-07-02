@@ -264,13 +264,13 @@ namespace FaceGenChecker
                                         var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.Value == -1 && nifBlock.Key.StartsWith(originalName)).ToList();
                                         foreach (var nifBlock in fuzzyMatched)
                                         {
-                                            _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, headPart, nifBlock);
+                                            _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, headPart, nifBlock.Key);
                                             matched = true;
                                             _renamedHeadParts.TryAdd(headPart, originalName);
                                             nifBlocks.Remove(nifBlock.Key);
                                         }
                                         // If NIF was already a DUPLICATE with the same initial substring, we revert the HDPT to the NIF value
-                                        var matchedToTag = nifBlocks.Where(nifBlock => nifBlock.Value == originalName.Length).ToList();
+                                        var matchedToTag = nifBlocks.Where(nifBlock => nifBlock.Value == originalName.Length && nifBlock.Key.StartsWith(originalName)).ToList();
                                         foreach (var nifBlock in matchedToTag)
                                         {
                                             _settings.diagnostics.logger.WriteLine("{0} {1} use DUPLICATE {2} in NIF", npc, headPart, nifBlock.Key);
