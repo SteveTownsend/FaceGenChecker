@@ -284,8 +284,17 @@ namespace FaceGenChecker
                         }
                         if (!matched)
                         {
-                            _settings.diagnostics.logger.WriteLine("{0} {1} no match in NIF", npc, headPart);
-                            ++mismatches;
+                            // This is OK if it's an Extra Part.
+                            // TODO Ideally we would check it has a valid parent in NIF and plugin.
+                            if (headPart.Flags.HasFlag(HeadPart.Flag.IsExtraPart))
+                            {
+                                _settings.diagnostics.logger.WriteLine("{0} {1} extra-part not found in NIF", npc, headPart);
+                            }
+                            else
+                            {
+                                _settings.diagnostics.logger.WriteLine("{0} {1} no match in NIF", npc, headPart);
+                                ++mismatches;
+                            }
                         }
                     }
                     else
