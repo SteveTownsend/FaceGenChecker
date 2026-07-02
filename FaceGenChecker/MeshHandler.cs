@@ -258,10 +258,10 @@ namespace FaceGenChecker
                                         matched = true;
                                         _renamedHeadParts.TryAdd(headPart, originalName);
                                     }
-                                    // fuzzy match on NIF blocks that starts with the canonical name but is not itself DUPLICATE tagged
                                     else
                                     {
-                                        var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.Value == -1 && nifBlock.Key.Equals(originalName)).ToList();
+                                        // fuzzy match on NIF blocks that starts with the canonical name but is not itself DUPLICATE tagged
+                                        var fuzzyMatched = nifBlocks.Where(nifBlock => nifBlock.Value == -1 && nifBlock.Key.StartsWith(originalName)).ToList();
                                         foreach (var nifBlock in fuzzyMatched)
                                         {
                                             _settings.diagnostics.logger.WriteLine("{0} {1} fuzzy match {2} in NIF", npc, headPart, nifBlock);
@@ -348,7 +348,7 @@ namespace FaceGenChecker
                 }
                 if (nifBlocks.Count > 0)
                 {
-                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, String.Join(",",nifBlocks.ToArray()));
+                    _settings.diagnostics.logger.WriteLine("{0} has {1} NIF headparts unmatched in plugin", npc, String.Join(",",nifBlocks.Keys.ToArray()));
                 }
                 _settings.diagnostics.logger.WriteLine("MISMATCH - {0} forwarded for checking", npc);
                 // this operation is not thread-safe
